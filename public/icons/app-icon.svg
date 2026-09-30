@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Worthwhile</title>
+  <rect width="512" height="512" fill="#130713" />
+  <rect x="96" y="96" width="320" height="320" fill="#bd174f" />
+  <path d="M144 164h52l41 184 46-146h35l45 146 41-184h52l-64 232h-51l-40-127-41 127h-51z" fill="#fff5eb" />
+</svg>

@@ -1,0 +1,110 @@
+:root {
+  color: #35142e;
+  background: #130713;
+  font-family: system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: #f1dfd0;
+}
+
+.app-header {
+  height: 74px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  background: #130713;
+  color: #fff5eb;
+  letter-spacing: 0.12em;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: #bd174f;
+}
+
+.foundation-panel {
+  width: min(720px, calc(100% - 32px));
+  margin: 64px auto;
+}
+
+.eyebrow {
+  color: #bd174f;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  max-width: 12ch;
+  margin: 16px 0;
+  font-family: Georgia, serif;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  font-weight: 400;
+  line-height: 0.95;
+}
+
+.foundation-panel > p:not(.eyebrow) {
+  max-width: 54ch;
+  color: #6d4a61;
+  line-height: 1.7;
+}
+
+.foundation-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 36px;
+  background: #b8879f;
+  border: 1px solid #b8879f;
+}
+
+.foundation-status div {
+  min-width: 0;
+  padding: 18px;
+  background: #fff5eb;
+}
+
+.foundation-status dt {
+  margin-bottom: 8px;
+  color: #6d4a61;
+  font-size: 0.75rem;
+}
+
+.foundation-status dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .foundation-panel {
+    margin-block: 40px;
+  }
+
+  .foundation-status {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,6 @@
+coverage/
+dist/
+docs/reference/accepted-demo.html
+docs/reference/legacy-draft/
+node_modules/
+package-lock.json

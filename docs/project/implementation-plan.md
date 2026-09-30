@@ -1,0 +1,563 @@
+# MVP 实施计划
+
+更新日期：2026-09-30
+
+> 本文件先提供中文版，后附英文版。两种语言表达同一份计划；以后更新阶段状态、验收条件或范围时，必须同步更新两部分。若出现歧义，以中文版确认产品意图，以英文版辅助 Agent 和代码协作。
+
+## 当前状态
+
+| 领域         | 状态       | 证据或下一步                                                                                |
+| ------------ | ---------- | ------------------------------------------------------------------------------------------- |
+| MVP 产品范围 | 已完成     | 已对齐 California 收入规划、50 项目标的信息架构和明确不做项。                               |
+| 视觉方向     | 已完成     | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
+| 技术架构     | 已完成     | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
+| 仓库治理     | 已完成     | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
+| 产品实现     | 领域层完成 | Phase 0、Phase 1 和 Phase 2 已完成；下一阶段是本地优先规划器与验收 UI。                     |
+| 部署         | 未开始     | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
+
+## 架构基线
+
+```text
+不依赖 GitHub Actions 的静态托管
+    │ 静态 HTML、CSS、JavaScript、字体和 PWA 资源
+    ▼
+React PWA
+    ├── domain：规划模型和税务规则
+    ├── application：业务命令、派生数据和同步编排
+    ├── local adapter：IndexedDB
+    └── cloud adapters
+          ├── Firebase Authentication
+          └── Cloud Firestore
+```
+
+应用必须在没有 Firebase 时仍可使用。Firebase 只提供身份和同步能力，不拥有税务引擎或 UI 状态模型。
+
+## Phase 0 — 固化验收基线
+
+状态：已于 2026-09-30 完成。
+
+交付物：
+
+- 将验收 Demo 保存为 `docs/reference/accepted-demo.html`。
+- 记录 7 套主题、字体搭配、桌面宽度、响应式行为和主要交互。
+- 替换旧 UI 前，保留当前未提交草稿中有价值的税务逻辑和测试。
+- 确认 `.gitignore` 覆盖依赖、构建产物、Firebase 本地状态、测试产物和敏感配置。
+
+退出条件：
+
+- 可以直接从仓库文件打开验收视觉基线。
+- 产品范围和架构约束已由根目录 `AGENTS.md` 引用。
+- 旧草稿中的有用逻辑没有丢失。
+
+## Phase 1 — 建立应用基础工程
+
+状态：已于 2026-09-30 完成。
+
+交付物：
+
+- 初始化 React、TypeScript 和 Vite。
+- 启用严格 TypeScript、Lint、格式检查、Vitest 和生产构建脚本。
+- 按当前仓库名称 `payroll-calcualtion` 配置 GitHub Pages base path。
+- 建立 `development-constraints.md` 规定的高层目录边界。
+- 增加统一的本地 `npm run verify:quick` 和 `npm run verify` 核验入口。
+- 禁用自动触发的 GitHub Actions，避免消耗共享 CI 免费额度。
+
+退出条件：
+
+- 本地开发服务器可以正常启动。
+- 类型检查、Lint、格式检查、测试、生产构建和仓库约束检查通过 `npm run verify`。
+- 计划中的适配层之外不存在 Firebase 依赖。
+
+## Phase 2 — 实现领域模型与税务引擎
+
+状态：已于 2026-09-30 完成。
+
+交付物：
+
+- 定义版本化的 `PlanDocument`、分类、目标、税务资料和偏好设置。
+- 金额使用整数美分，实体使用稳定 UUID。
+- 把现有累进税和收入反推算法迁移成纯 TypeScript 模块。
+- 按年份拆分联邦和 California 税务数据。
+- 增加数据来源、适用年份和规划代理标识。
+- 实现分类小计、置顶小计、总目标和收入结果 selectors。
+- 增加数据校验和 schema 迁移基础设施。
+
+退出条件：
+
+- 税级边界、Social Security 上限、Additional Medicare、California mental-health tax、零目标和反推求解测试通过。
+- Domain 模块不依赖 React、Firebase 或浏览器全局对象。
+- 展示层舍入不会改变原始计算结果。
+
+## Phase 3 — 交付本地优先规划器
+
+交付物：
+
+- 实现验收通过的顶栏、导航、中间内容、装饰轨和固定收入栏。
+- 实现置顶主页和分类编辑页。
+- 实现分类和目标的新增、编辑、移动、排序、置顶和删除。
+- 实现跨分类搜索和渐进式列表展开。
+- 实现税务资料和完整税费明细面板。
+- 通过 `LocalPlanRepository` 实现 IndexedDB 持久化。
+- 增加匿名本地模式和示例数据。
+
+退出条件：
+
+- 没有网络或 Firebase 项目时，完整规划器仍可使用。
+- UI 中所有可见的主要控件都有明确且真实的行为。
+- 修改任一源数据会立即更新所有相关小计和税务结果。
+- 50 项目标测试数据仍然易用且没有越界。
+
+## Phase 4 — 复现主题与字体
+
+交付物：
+
+- 将 7 套主题转换为语义化 CSS token。
+- 为全部验收字体自托管锁定版本的 WOFF2 文件和许可证。
+- 使用完整 Unicode 范围分包，不使用只包含 Demo 文案的删字子集。
+- 优先加载当前主题字体，并在浏览器空闲时缓存其他主题字体。
+- 保留验收通过的顶栏和侧栏局部渐变。
+- 增加字体回退检测和视觉测试样例。
+
+退出条件：
+
+- 7 套主题的视觉结构和字体与验收版本一致。
+- 切换主题不会改变业务或计算数据。
+- 常用和非常用中文测试文本不会静默回退到其他字体。
+- 离线重新打开后仍可使用所有主题。
+
+## Phase 5 — 实现可安装与离线能力
+
+交付物：
+
+- 增加 Web App Manifest、图标、主题色和 Service Worker。
+- 缓存应用外壳和所需字体资源。
+- 实现安全的 Service Worker 更新提示和缓存失效机制。
+- 适配手机安全区和独立应用显示模式。
+- 离线期间只保留最新一份待同步规划文档。
+
+退出条件：
+
+- 支持的桌面和手机浏览器可以安装应用。
+- 已安装应用可以离线重新打开。
+- 离线时仍能计算税务、浏览和编辑。
+- 新版本发布后，用户不会长期停留在过期缓存版本。
+
+## Phase 6 — 增加身份与跨设备同步
+
+交付物：
+
+- 增加与 Domain 隔离的 Firebase 客户端初始化。
+- 实现邮箱密码注册、登录、退出和密码重置。
+- 仅在配置和体验仍符合既定范围时增加 Google 登录。
+- 通过 `FirebasePlanRepository` 实现 Firestore 规划存储。
+- 实现首次登录时导入本地数据，以及新设备从云端下载。
+- 对写入做 debounce，并使用事务或等价 revision 检查。
+- 实现远端更新、离线重试和明确的冲突解决。
+- 退出登录时清除认证用户的私人缓存。
+- 实现 JSON 导出、导入和规划删除。
+
+退出条件：
+
+- 同一测试账号可在独立的手机尺寸和桌面尺寸浏览器上下文间同步。
+- 离线修改会在恢复网络后同步。
+- 旧 revision 不能静默覆盖较新的云端版本。
+- 用户无法读取或修改其他用户的规划。
+
+## Phase 7 — 加固质量、安全和性能
+
+交付物：
+
+- 完成单元、集成、Repository 合同、安全规则、端到端、视觉和可访问性测试。
+- 使用 Firebase Emulator Suite 测试认证和 Firestore。
+- 在桌面和手机宽度检查全部 7 套主题。
+- 检查 50 项目标、长中文名称、大额数字和空状态。
+- 审计初始 JavaScript、字体加载、Firestore 读写量。
+- 确认日志中不包含密钥或私人财务数据。
+
+退出条件：
+
+- 所有自动化质量门禁通过。
+- 所有支持宽度都不存在横向溢出、裁切或控件遮挡。
+- 在已记录的负载假设下，应用保持在 Firebase Spark 使用模型内。
+- 可访问性和键盘关键流程通过人工检查。
+
+## Phase 8 — 发布 MVP
+
+交付物：
+
+- 使用不触发 GitHub Actions 的方式发布静态资源；优先评估 GitHub Pages 的非 Actions 发布路径，不合适时使用 Cloudflare Pages。
+- 配置 Firebase 授权域名并部署已评审的 Firestore Rules。
+- Firebase 保持 Spark 方案，不绑定计费。
+- 在设备可用时，于桌面浏览器、iOS Safari 和 Android Chrome 验证生产 PWA。
+- 更新 README 中的启动、税务假设、隐私、备份和部署说明。
+- 只有在获得用户明确授权后才 commit 和 push。
+
+退出条件：
+
+- 生产地址可访问并可以安装。
+- 生产 Firebase 项目上的跨设备同步正常。
+- 离线重新打开和恢复后的同步正常。
+- 用户完成最终人工验收。
+
+## 发布验收清单
+
+- [ ] 同一账号的手机端和电脑端数据保持一致。
+- [ ] 离线修改能够保留并在恢复网络后同步。
+- [ ] revision 冲突可见且可恢复。
+- [ ] 50 项目标仍然整洁、可操作。
+- [ ] 置顶、分类、搜索和税务资料流程端到端可用。
+- [ ] 所有相关输入都会更新收入结果。
+- [ ] 7 套主题不改变数据并使用预期字体。
+- [ ] PWA 可以安装并离线重新打开。
+- [ ] Firestore Rules 阻止跨用户访问。
+- [ ] 税务数据年份和限制清晰可见。
+- [ ] 不需要或启用任何付费服务。
+- [ ] 测试、构建和人工视觉验收全部通过。
+
+## 计划提交顺序
+
+1. `docs: freeze accepted MVP and project constraints`
+2. `chore: scaffold React TypeScript Vite PWA`
+3. `feat: add plan domain and tax engine`
+4. `feat: implement local-first planner`
+5. `feat: reproduce accepted themes and fonts`
+6. `feat: add installable offline PWA`
+7. `feat: add Firebase authentication`
+8. `feat: add Firestore cross-device sync`
+9. `test: add security sync and visual coverage`
+10. `docs: document deployment privacy and tax assumptions`
+
+## 更新日志
+
+### 2026-09-30 — 完成 Phase 1 复核与 Phase 2 领域实现
+
+- 重新运行完整 `npm run verify`，并实际启动开发服务器；`/payroll-calcualtion/` 返回 HTTP 200，确认 Phase 1 的全部退出条件仍成立。
+- 将 `PlanDocument` 固定为 schema version 1，使用整数美分、basis points、稳定 UUID，并加入 fail-closed 校验和 version 0 到 version 1 的迁移。
+- 将 legacy 累进税、年度工资估算和收入反推迁移为纯 TypeScript；反推器按整数美分返回满足目标的最小税前年薪。
+- 将 2026 联邦、2025 California 代理税表和 2026 payroll 假设拆为版本化规则文件，记录官方来源、适用年份、规划年份和 proxy 原因。
+- 增加分类小计、置顶小计、总目标、安全余量和收入 projection selectors；所有派生值均不写入 `PlanDocument`。
+- 增加 18 个 Domain/Tax 测试，与基础渲染测试合计 19 个；覆盖 Phase 2 的全部退出条件。
+- 收紧架构边界脚本的 browser-global 匹配，避免测试描述中的普通单词 `document` 造成误报，同时继续阻止真实 browser-global 访问。
+- 完整本地核验通过：TypeScript、ESLint、Prettier、19 个测试、生产 PWA 构建、架构边界、PWA 产物和项目文档检查。
+- 未修改验收 UI，未连接 Firebase，未部署、commit 或 push。
+
+### 2026-09-30 — 将远端 CI 改为本地固定核验
+
+- 删除自动触发的 GitHub Actions 工作流，避免消耗用户在其他项目之间共享的免费 CI 额度。
+- 增加跨平台 `npm run verify:quick` 和 `npm run verify` 命令。
+- 完整核验现在统一执行类型检查、Lint、格式检查、单元测试、生产构建、架构边界、PWA 产物和项目文档检查。
+- 项目文档检查会阻止自动 GitHub workflow 文件被意外重新加入。
+- Phase 1 改为以本地固定核验通过作为完成条件，不再等待远端 CI。
+- 已实际运行 `npm run verify`，全部本地检查通过。
+- 未部署、commit 或 push。
+
+### 2026-09-30 — 增加中文版实施计划
+
+- 在文件开头增加与英文内容对应的完整中文版。
+- 规定后续范围、阶段状态、验收条件和更新日志必须中英文同步维护。
+- 未修改产品代码、Firebase 配置或部署状态。
+
+### 2026-09-30 — 初始化正式仓库骨架
+
+- 将验收通过的独立 Demo 保存到 `docs/reference/accepted-demo.html`。
+- 把原有未提交概念验证原样保存到 `docs/reference/legacy-draft/`，在替换根目录入口前使用 SHA-1 校验副本一致。
+- 初始化 React 19、TypeScript 5、Vite 8、Vitest、ESLint、Prettier 和 PWA 构建插件。
+- 建立 Domain、Application、Port、Adapter、Feature、Component、Style、Firebase、字体和测试目录边界。
+- 增加初始的可移植规划与认证接口，但尚未连接 Firebase。
+- 增加默认拒绝全部访问的 Firestore Rules 基线。
+- 增加 GitHub Actions，覆盖安装、类型检查、Lint、格式检查、测试和生产构建。
+- 验证使用 `/payroll-calcualtion/` base path 的本地启动。
+- 验证类型检查、Lint、格式检查、1 个基础测试和生产 PWA 构建。
+- GitHub Actions 尚未在远端运行，因为尚未获得 commit 或 push 授权。
+- `npm install` 报告 0 个已知漏洞。
+- 本机默认 npm 缓存存在历史权限问题；若安装遇到 `EPERM`，使用类似 `NPM_CONFIG_CACHE=/private/tmp/payroll-npm-cache` 的任务专用缓存，不修改目录所有权，也不使用 `sudo`。
+- 未连接 Firebase 项目，未部署，未 commit，未 push。
+
+### 2026-09-30 — 建立项目治理文档
+
+- 增加仓库级 Agent 指令和项目控制文档。
+- 记录已确认的架构、成本限制、完整字体要求和跨设备同步范围。
+- 将保存仓库基线标记为下一项可执行任务。
+- 未进行产品实现、部署、commit 或 push。
+
+---
+
+# English version
+
+Last updated: 2026-09-30
+
+## Current status
+
+| Area                   | Status          | Evidence or next action                                                                                        |
+| ---------------------- | --------------- | -------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete        | California planning, 50-goal information architecture, and non-goals are agreed.                               |
+| Visual direction       | Complete        | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
+| Architecture           | Complete        | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
+| Repository governance  | Complete        | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
+| Product implementation | Domain complete | Phases 0, 1, and 2 are complete; the local-first planner and accepted UI are next.                             |
+| Deployment             | Not started     | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
+
+## Architecture baseline
+
+```text
+Static hosting without GitHub Actions
+    │ static HTML, CSS, JavaScript, fonts and PWA assets
+    ▼
+React PWA
+    ├── domain: plan and tax rules
+    ├── application: commands, selectors and sync orchestration
+    ├── local adapter: IndexedDB
+    └── cloud adapters
+          ├── Firebase Authentication
+          └── Cloud Firestore
+```
+
+The application must remain usable without Firebase. Firebase adds identity and synchronization; it does not own the tax engine or UI state model.
+
+## Phase 0 — Freeze the accepted baseline
+
+Status: Complete on 2026-09-30.
+
+Deliverables:
+
+- Copy the accepted demo into `docs/reference/accepted-demo.html`.
+- Record its seven themes, font mapping, desktop width, responsive behavior, and primary interactions.
+- Preserve useful tax logic and tests from the current uncommitted draft before replacing its UI.
+- Confirm `.gitignore` covers dependencies, builds, Firebase state, test output, and secrets.
+
+Exit criteria:
+
+- The accepted visual can be opened from a repository file.
+- Product scope and architecture constraints are linked from root `AGENTS.md`.
+- No useful draft logic is lost.
+
+## Phase 1 — Establish the application foundation
+
+Status: Complete on 2026-09-30.
+
+Deliverables:
+
+- Scaffold React, TypeScript, and Vite.
+- Enable strict TypeScript, linting, formatting, Vitest, and production build scripts.
+- Configure the GitHub Pages base path for the current repository name `payroll-calcualtion`.
+- Add the high-level directory boundaries described in `development-constraints.md`.
+- Add unified local `npm run verify:quick` and `npm run verify` entry points.
+- Disable automatically triggered GitHub Actions to protect the shared free CI quota.
+
+Exit criteria:
+
+- Local development starts successfully.
+- Type checking, linting, formatting, tests, production build, and repository constraints pass through `npm run verify`.
+- No Firebase dependency exists outside the planned adapter boundary.
+
+## Phase 2 — Implement the domain and tax engine
+
+Status: Complete on 2026-09-30.
+
+Deliverables:
+
+- Define the versioned `PlanDocument`, categories, goals, tax profile, and preferences.
+- Use integer cents and stable UUIDs.
+- Migrate the existing progressive-tax and inverse-solver behavior into pure TypeScript modules.
+- Separate federal and California rule data by year.
+- Add source metadata and planning-proxy labels.
+- Implement selectors for category totals, pinned totals, total target, and calculated income.
+- Add validation and schema migration infrastructure.
+
+Exit criteria:
+
+- Tax boundary, Social Security cap, Additional Medicare, California mental-health tax, zero target, and inverse-solver tests pass.
+- Domain modules run without React, Firebase, or browser globals.
+- Display rounding does not alter source calculations.
+
+## Phase 3 — Deliver the local-first planner
+
+Deliverables:
+
+- Implement the accepted top bar, navigation, central content, decorative rail, and persistent income panel.
+- Implement pinned home and category editing screens.
+- Implement category and goal create, edit, move, order, pin, and delete flows.
+- Implement cross-category search and progressive list reveal.
+- Implement tax-profile and tax-breakdown panels.
+- Implement IndexedDB persistence through `LocalPlanRepository`.
+- Add anonymous local mode and sample data.
+
+Exit criteria:
+
+- The full planner works without a network or Firebase project.
+- Every primary control visible in the UI has defined behavior.
+- Editing any source input immediately updates all affected totals and tax results.
+- The 50-goal fixture remains usable and free of overflow.
+
+## Phase 4 — Reproduce themes and fonts
+
+Deliverables:
+
+- Convert the seven themes into semantic CSS tokens.
+- Self-host pinned WOFF2 files and licenses for all accepted font families.
+- Use complete Unicode-range packages rather than demo-text-only subsets.
+- Load active-theme fonts first and cache remaining theme fonts while idle.
+- Preserve the accepted local top-bar and side-panel gradients.
+- Add automatic font-fallback detection and visual fixtures.
+
+Exit criteria:
+
+- All seven themes match the accepted visual structure and typography.
+- Theme switching changes no business or calculation data.
+- Common and uncommon Chinese test strings render without silent family fallback.
+- Themes remain available after an offline restart.
+
+## Phase 5 — Make the application installable and offline-capable
+
+Deliverables:
+
+- Add the web app manifest, icons, theme colors, and service worker.
+- Cache the application shell and required font packages.
+- Implement safe service-worker update notification and cache invalidation.
+- Handle phone safe areas and installed display mode.
+- Keep offline edits in a single latest pending plan document.
+
+Exit criteria:
+
+- Installation works on supported desktop and mobile browsers.
+- The installed application reopens offline.
+- Tax calculation, browsing, and editing work offline.
+- A new release does not leave users indefinitely on a stale cached build.
+
+## Phase 6 — Add identity and cross-device synchronization
+
+Deliverables:
+
+- Add Firebase client bootstrap isolated from domain code.
+- Implement email/password registration, login, logout, and password reset.
+- Add Google sign-in only if configuration and UX remain within the agreed scope.
+- Implement Firestore plan storage through `FirebasePlanRepository`.
+- Implement first-login local import and new-device cloud download.
+- Debounce writes and use transactions or equivalent revision checks.
+- Implement remote updates, offline retry, and explicit conflict resolution.
+- Clear authenticated private cache on sign-out.
+- Implement JSON export, import, and plan deletion.
+
+Exit criteria:
+
+- The same test account synchronizes between independent phone-sized and desktop-sized browser contexts.
+- Offline edits synchronize after reconnection.
+- A stale revision cannot silently overwrite a newer cloud revision.
+- One user cannot read or modify another user's plan.
+
+## Phase 7 — Harden quality, security, and performance
+
+Deliverables:
+
+- Complete unit, integration, repository-contract, security-rule, end-to-end, visual, and accessibility tests.
+- Use Firebase Emulator Suite for authentication and Firestore tests.
+- Test all seven themes at desktop and mobile widths.
+- Test 50 goals, long Chinese labels, large dollar values, and empty states.
+- Audit initial JavaScript, font loading, Firestore reads, and writes.
+- Verify no secrets or private financial data appear in logs.
+
+Exit criteria:
+
+- All automated quality gates pass.
+- No supported viewport has horizontal overflow, clipping, or obscured controls.
+- The app stays within the planned Spark usage model under the documented load assumptions.
+- Accessibility and keyboard-critical flows pass manual inspection.
+
+## Phase 8 — Release the MVP
+
+Deliverables:
+
+- Publish static assets without triggering GitHub Actions; first evaluate a non-Actions GitHub Pages path and use Cloudflare Pages if it is unsuitable.
+- Configure Firebase authorized domains and deploy reviewed Firestore rules.
+- Keep the Firebase project on Spark with no billing attachment.
+- Validate the production PWA on one desktop browser, iOS Safari, and Android Chrome when devices are available.
+- Update the README with setup, tax assumptions, privacy, backup, and deployment instructions.
+- Commit and push only after explicit user authorization.
+
+Exit criteria:
+
+- The production URL loads and is installable.
+- Cross-device synchronization works against the production Firebase project.
+- Offline restart and later synchronization work.
+- The user completes final manual acceptance.
+
+## Release acceptance checklist
+
+- [ ] Same-account phone and desktop data remain consistent.
+- [ ] Offline edits are retained and later synchronized.
+- [ ] Revision conflicts are visible and recoverable.
+- [ ] Fifty goals remain clean and usable.
+- [ ] Pinned, category, search, and tax-profile flows work end to end.
+- [ ] Income results update from every relevant input.
+- [ ] Seven themes preserve data and render their intended fonts.
+- [ ] The PWA installs and reopens offline.
+- [ ] Firestore rules prevent cross-user access.
+- [ ] Tax source years and limitations are visible.
+- [ ] No paid service is required or enabled.
+- [ ] Tests, build, and manual visual acceptance pass.
+
+## Planned commit sequence
+
+1. `docs: freeze accepted MVP and project constraints`
+2. `chore: scaffold React TypeScript Vite PWA`
+3. `feat: add plan domain and tax engine`
+4. `feat: implement local-first planner`
+5. `feat: reproduce accepted themes and fonts`
+6. `feat: add installable offline PWA`
+7. `feat: add Firebase authentication`
+8. `feat: add Firestore cross-device sync`
+9. `test: add security sync and visual coverage`
+10. `docs: document deployment privacy and tax assumptions`
+
+## Update log
+
+### 2026-09-30 — Phase 1 re-verified and Phase 2 domain delivered
+
+- Re-ran the complete `npm run verify` gate and started the development server; `/payroll-calcualtion/` returned HTTP 200, confirming every Phase 1 exit criterion still holds.
+- Fixed `PlanDocument` at schema version 1 with integer cents, basis points, stable UUIDs, fail-closed validation, and a version 0 to version 1 migration.
+- Migrated the legacy progressive tax, annual pay estimate, and inverse solver to pure TypeScript; the solver returns the minimum whole cent of gross income that covers the target.
+- Split 2026 federal, 2025 California proxy, and 2026 payroll assumptions into versioned rule files with official sources, applicable years, planning years, and a documented proxy reason.
+- Added category, pinned, total-goal, safety-buffer, and income-projection selectors; derived values are never persisted in `PlanDocument`.
+- Added 18 Domain/Tax tests, for 19 total with the foundation rendering test, covering every Phase 2 exit criterion.
+- Tightened browser-global matching in the architecture check so ordinary prose containing `document` does not create a false positive while real browser-global access remains blocked.
+- Full local verification passed: TypeScript, ESLint, Prettier, 19 tests, production PWA build, architecture boundaries, PWA artifacts, and project documents.
+- The accepted UI was not modified; Firebase remains disconnected, and no deployment, commit, or push was performed.
+
+### 2026-09-30 — Replaced remote CI with fixed local verification
+
+- Removed the automatically triggered GitHub Actions workflow to avoid consuming the user's free CI quota shared across other projects.
+- Added cross-platform `npm run verify:quick` and `npm run verify` commands.
+- Full verification now runs type checking, linting, formatting, unit tests, production build, architecture-boundary, PWA-artifact, and project-document checks through one entry point.
+- The project-document check prevents automatic GitHub workflow files from being reintroduced accidentally.
+- Phase 1 now completes through the fixed local verification gate and no longer waits for remote CI.
+- `npm run verify` was executed and all local checks passed.
+- No deployment, commit, or push was performed.
+
+### 2026-09-30 — Added the Chinese implementation plan
+
+- Added a complete Chinese version before the corresponding English content.
+- Required future scope, phase status, exit criteria, and update-log changes to remain synchronized in both languages.
+- No product code, Firebase configuration, or deployment state changed.
+
+### 2026-09-30 — Repository foundation initialized
+
+- Copied the accepted standalone demo to `docs/reference/accepted-demo.html`.
+- Preserved the original uncommitted proof of concept under `docs/reference/legacy-draft/` and verified the copies by SHA-1 before replacing the root entry files.
+- Initialized React 19, TypeScript 5, Vite 8, Vitest, ESLint, Prettier, and the PWA build plugin.
+- Added domain, application, port, adapter, feature, component, style, Firebase, font, and test boundaries.
+- Added initial portable plan and authentication interfaces without connecting Firebase.
+- Added a deny-all Firestore rules baseline.
+- Added GitHub Actions checks for install, type checking, linting, formatting, tests, and production build.
+- Verified local startup at the configured `/payroll-calcualtion/` base path.
+- Verified type checking, linting, formatting, one foundation test, and the production PWA build.
+- The GitHub Actions workflow has not run remotely because no commit or push was authorized.
+- Confirmed `npm install` reported zero known vulnerabilities.
+- The local machine's default npm cache has a historical ownership problem; use a task-specific cache such as `NPM_CONFIG_CACHE=/private/tmp/payroll-npm-cache` instead of changing ownership or using `sudo` if installation fails with `EPERM`.
+- No Firebase project was connected, no deployment occurred, and no commit or push was performed.
+
+### 2026-09-30 — Project governance established
+
+- Added repository-level agent instructions and project control documents.
+- Recorded the accepted architecture, cost limits, complete-font requirement, and cross-device synchronization scope.
+- Marked repository baseline preservation as the next executable task.
+- No product implementation, deployment, commit, or push was performed.

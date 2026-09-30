@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="从理想的每月生活方式，反推出在美国加州需要的税前年薪。"
+    />
+    <title>生活目标收入计算器 · California</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="#" aria-label="返回顶部">
+          <span class="brand-mark" aria-hidden="true">↗</span>
+          <span>Worthwhile</span>
+        </a>
+        <div class="tax-year-pill">
+          <span class="status-dot"></span>
+          2026 California planning estimate
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <p class="eyebrow">LIFE FIRST, SALARY SECOND</p>
+          <h1>你想要的生活，<br /><em>需要多少收入？</em></h1>
+          <p class="hero-copy">
+            不从工资开始做预算，而是从你真正想做的事情开始。填下每月目标，我们会把美国联邦税与加州税算进去，反推出所需收入。
+          </p>
+        </section>
+
+        <div class="calculator-layout">
+          <section class="planner-card" aria-labelledby="goals-title">
+            <div class="section-heading">
+              <div>
+                <span class="step-number">01</span>
+                <h2 id="goals-title">每个月，你想把钱花在哪里？</h2>
+              </div>
+              <button class="text-button" id="reset-button" type="button">恢复示例</button>
+            </div>
+
+            <div class="goals-list" id="goals-list" aria-live="polite"></div>
+
+            <button class="add-goal-button" id="add-goal-button" type="button">
+              <span aria-hidden="true">＋</span> 添加一个生活目标
+            </button>
+
+            <div class="monthly-summary">
+              <span>每月生活目标</span>
+              <strong id="monthly-goal-total">$0</strong>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-heading compact">
+              <div>
+                <span class="step-number">02</span>
+                <h2>告诉我们如何估算税费</h2>
+              </div>
+            </div>
+
+            <div class="settings-grid">
+              <label class="field wide">
+                <span>报税身份 <small>Filing status</small></span>
+                <select id="filing-status">
+                  <option value="single">Single</option>
+                  <option value="married">Married filing jointly</option>
+                  <option value="head">Head of household</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>每月税前扣除 <small>401(k)、保险等</small></span>
+                <div class="money-input standalone">
+                  <span>$</span>
+                  <input id="pretax-deductions" type="number" min="0" step="50" value="0" inputmode="decimal" />
+                </div>
+              </label>
+
+              <label class="field">
+                <span>安全余量 <small id="buffer-value">5%</small></span>
+                <input id="buffer" type="range" min="0" max="25" step="1" value="5" />
+              </label>
+            </div>
+
+            <p class="field-note">
+              税前扣除会增加你需要的工资，但通常会减少所得税。安全余量用于应对估算误差和临时开支。
+            </p>
+          </section>
+
+          <aside class="result-card" aria-labelledby="result-title">
+            <div class="result-topline">
+              <span class="step-number light">03</span>
+              <span>你的收入目标</span>
+            </div>
+            <p id="result-title" class="result-label">建议税前年薪至少达到</p>
+            <div class="salary-result" id="annual-gross">$0</div>
+            <div class="monthly-gross"><span id="monthly-gross">$0</span> / 月税前</div>
+
+            <div class="income-bar" id="income-bar" aria-label="收入分配图"></div>
+            <div class="bar-legend">
+              <span><i class="legend-dot goals"></i>生活目标</span>
+              <span><i class="legend-dot pretax"></i>税前扣除</span>
+              <span><i class="legend-dot taxes"></i>预计税费</span>
+            </div>
+
+            <div class="result-stats">
+              <div>
+                <span>每月可支配收入</span>
+                <strong id="monthly-take-home">$0</strong>
+              </div>
+              <div>
+                <span>综合有效税率</span>
+                <strong id="effective-tax-rate">0%</strong>
+              </div>
+            </div>
+
+            <details class="tax-details" open>
+              <summary>税费是怎么组成的？</summary>
+              <div class="tax-rows" id="tax-rows"></div>
+            </details>
+
+            <div class="result-note">
+              <span aria-hidden="true">i</span>
+              <p>
+                这是用于生活规划的估算，不是报税建议。结果采用标准扣除，未计入税收抵免、逐项扣除、RSU 或其他收入。
+              </p>
+            </div>
+          </aside>
+        </div>
+
+        <section class="method-card">
+          <div>
+            <p class="eyebrow">WHAT'S INCLUDED</p>
+            <h2>不是简单地把支出除以 70%</h2>
+          </div>
+          <p>
+            计算器逐级计算 2026 联邦所得税、Social Security、Medicare、2026 CA SDI，以及最近官方加州居民税率，再用反向求解找到刚好覆盖目标的工资。
+          </p>
+          <a href="#sources">查看口径与来源 ↓</a>
+        </section>
+
+        <section class="sources" id="sources">
+          <p class="eyebrow">ASSUMPTIONS & SOURCES</p>
+          <h2>计算口径</h2>
+          <ul>
+            <li>收入全部来自加州 W‑2 工资，全年均匀发放，采用标准扣除。</li>
+            <li>联邦税率和标准扣除采用 IRS 2026 tax year 数据。</li>
+            <li>Social Security 工资上限为 $184,500；Medicare 按 1.45%，高收入部分另计 0.9%。</li>
+            <li>CA SDI 采用 2026 年 1.3%，无工资上限。</li>
+            <li>加州 2026 最终居民税表尚未发布，因此所得税暂用 FTB 最新的 2025 税级和标准扣除作规划估算；最终金额可能变化。</li>
+          </ul>
+          <div class="source-links">
+            <a href="https://www.irs.gov/newsroom/irs-releases-tax-inflation-adjustments-for-tax-year-2026-including-amendments-from-the-one-big-beautiful-bill" target="_blank" rel="noreferrer">IRS 2026 adjustments ↗</a>
+            <a href="https://www.ssa.gov/cola/factsheets/2026.html" target="_blank" rel="noreferrer">SSA 2026 wage base ↗</a>
+            <a href="https://edd.ca.gov/en/Payroll_Taxes/Rates_and_Withholding" target="_blank" rel="noreferrer">EDD CA SDI rate ↗</a>
+            <a href="https://www.ftb.ca.gov/about-ftb/newsroom/tax-news/2025/10.html" target="_blank" rel="noreferrer">FTB tax schedules ↗</a>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <span>Built for decisions that start with life.</span>
+        <span>Amounts in USD · California</span>
+      </footer>
+    </div>
+
+    <template id="goal-template">
+      <div class="goal-row">
+        <span class="goal-color" aria-hidden="true"></span>
+        <input class="goal-name" type="text" aria-label="目标名称" maxlength="36" />
+        <div class="money-input">
+          <span>$</span>
+          <input class="goal-amount" type="number" min="0" step="50" inputmode="decimal" aria-label="每月金额" />
+        </div>
+        <button class="remove-goal" type="button" aria-label="删除这个目标">×</button>
+      </div>
+    </template>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
