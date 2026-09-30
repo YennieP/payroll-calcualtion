@@ -1,5 +1,19 @@
 export { migratePlanDocument, PlanMigrationError } from "./migrations";
 export {
+  addCategory,
+  addGoal,
+  deleteCategory,
+  deleteGoal,
+  moveCategory,
+  moveGoalToCategory,
+  moveGoalWithinCategory,
+  selectTheme,
+  updateCategory,
+  updateGoal,
+  updateTaxProfile,
+} from "./commands";
+export type { GoalChanges, MutationMetadata, NewCategoryInput, NewGoalInput } from "./commands";
+export {
   selectCategorySubtotalCents,
   selectCategorySummaries,
   selectIncomeProjection,

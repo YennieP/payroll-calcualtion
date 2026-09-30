@@ -6,14 +6,14 @@
 
 ## 当前状态
 
-| 领域         | 状态       | 证据或下一步                                                                                |
-| ------------ | ---------- | ------------------------------------------------------------------------------------------- |
-| MVP 产品范围 | 已完成     | 已对齐 California 收入规划、50 项目标的信息架构和明确不做项。                               |
-| 视觉方向     | 已完成     | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
-| 技术架构     | 已完成     | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
-| 仓库治理     | 已完成     | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | 领域层完成 | Phase 0、Phase 1 和 Phase 2 已完成；下一阶段是本地优先规划器与验收 UI。                     |
-| 部署         | 未开始     | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
+| 领域         | 状态           | 证据或下一步                                                                                |
+| ------------ | -------------- | ------------------------------------------------------------------------------------------- |
+| MVP 产品范围 | 已完成         | 已对齐 California 收入规划、50 项目标的信息架构和明确不做项。                               |
+| 视觉方向     | 已完成         | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
+| 技术架构     | 已完成         | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
+| 仓库治理     | 已完成         | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
+| 产品实现     | Phase 3 进行中 | Phase 0、Phase 1 和 Phase 2 已完成；正在实现本地优先规划器与验收 UI。                       |
+| 部署         | 未开始         | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
 
@@ -89,6 +89,8 @@ React PWA
 - 展示层舍入不会改变原始计算结果。
 
 ## Phase 3 — 交付本地优先规划器
+
+状态：已于 2026-09-30 完成。
 
 交付物：
 
@@ -204,13 +206,13 @@ React PWA
 - [ ] 同一账号的手机端和电脑端数据保持一致。
 - [ ] 离线修改能够保留并在恢复网络后同步。
 - [ ] revision 冲突可见且可恢复。
-- [ ] 50 项目标仍然整洁、可操作。
-- [ ] 置顶、分类、搜索和税务资料流程端到端可用。
-- [ ] 所有相关输入都会更新收入结果。
+- [x] 50 项目标仍然整洁、可操作。
+- [x] 置顶、分类、搜索和税务资料流程端到端可用。
+- [x] 所有相关输入都会更新收入结果。
 - [ ] 7 套主题不改变数据并使用预期字体。
 - [ ] PWA 可以安装并离线重新打开。
 - [ ] Firestore Rules 阻止跨用户访问。
-- [ ] 税务数据年份和限制清晰可见。
+- [x] 税务数据年份和限制清晰可见。
 - [ ] 不需要或启用任何付费服务。
 - [ ] 测试、构建和人工视觉验收全部通过。
 
@@ -228,6 +230,18 @@ React PWA
 10. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-09-30 — 完成 Phase 3 本地优先规划器
+
+- 将验收 Demo 的 1180px 桌面骨架正式接入 React，包括顶栏、分类导航、置顶主页、分类编辑页、装饰轨和收入栏，并保留 7 套已确认主题的颜色 token。
+- 增加 6 个分类、50 个目标的稳定示例计划；主页仅展示置顶目标，长分类默认展示 6 项并可渐进展开。
+- 实现分类和目标的新增、编辑、删除、排序、跨分类移动与置顶，以及跨分类搜索、置顶管理、税务资料和完整税费明细。
+- 增加原生 IndexedDB `LocalPlanRepository`、同接口内存实现、250ms 防抖保存、revision 冲突处理和离线状态提示；Firebase 仍未连接。
+- 增加 repository contract、领域命令、50 项 fixture 和规划器交互测试；共 7 个测试文件、32 个测试通过。
+- 在真实浏览器中复核 1440px 桌面视口、390px 手机视口和 320px 最窄手机视口；修复手机主题面板右侧裁切与窄屏主题按钮无障碍名称缺失。
+- 修复 IndexedDB 异步 hydration 后非受控输入仍显示初始值的问题，并增加已保存金额与派生总额一致的回归测试。
+- 完整 `npm run verify` 通过：TypeScript、ESLint、Prettier、32 个测试、生产 PWA 构建、架构边界、PWA 产物和项目文档检查。
+- 未连接 Firebase、未部署，也未对本次 Phase 3 修改执行 commit 或 push。
 
 ### 2026-09-30 — 完成 Phase 1 复核与 Phase 2 领域实现
 
@@ -288,14 +302,14 @@ Last updated: 2026-09-30
 
 ## Current status
 
-| Area                   | Status          | Evidence or next action                                                                                        |
-| ---------------------- | --------------- | -------------------------------------------------------------------------------------------------------------- |
-| MVP product scope      | Complete        | California planning, 50-goal information architecture, and non-goals are agreed.                               |
-| Visual direction       | Complete        | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
-| Architecture           | Complete        | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
-| Repository governance  | Complete        | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Domain complete | Phases 0, 1, and 2 are complete; the local-first planner and accepted UI are next.                             |
-| Deployment             | Not started     | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
+| Area                   | Status              | Evidence or next action                                                                                        |
+| ---------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete            | California planning, 50-goal information architecture, and non-goals are agreed.                               |
+| Visual direction       | Complete            | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
+| Architecture           | Complete            | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
+| Repository governance  | Complete            | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
+| Product implementation | Phase 3 in progress | Phases 0, 1, and 2 are complete; the local-first planner and accepted UI are underway.                         |
+| Deployment             | Not started         | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
 
 ## Architecture baseline
 
@@ -371,6 +385,8 @@ Exit criteria:
 - Display rounding does not alter source calculations.
 
 ## Phase 3 — Deliver the local-first planner
+
+Status: Complete on 2026-09-30.
 
 Deliverables:
 
@@ -486,13 +502,13 @@ Exit criteria:
 - [ ] Same-account phone and desktop data remain consistent.
 - [ ] Offline edits are retained and later synchronized.
 - [ ] Revision conflicts are visible and recoverable.
-- [ ] Fifty goals remain clean and usable.
-- [ ] Pinned, category, search, and tax-profile flows work end to end.
-- [ ] Income results update from every relevant input.
+- [x] Fifty goals remain clean and usable.
+- [x] Pinned, category, search, and tax-profile flows work end to end.
+- [x] Income results update from every relevant input.
 - [ ] Seven themes preserve data and render their intended fonts.
 - [ ] The PWA installs and reopens offline.
 - [ ] Firestore rules prevent cross-user access.
-- [ ] Tax source years and limitations are visible.
+- [x] Tax source years and limitations are visible.
 - [ ] No paid service is required or enabled.
 - [ ] Tests, build, and manual visual acceptance pass.
 
@@ -510,6 +526,18 @@ Exit criteria:
 10. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-09-30 — Phase 3 local-first planner delivered
+
+- Integrated the accepted demo's 1180px desktop skeleton into React, including the top bar, category navigation, pinned home, category editor, decorative rail, and income panel, while retaining color tokens for all seven accepted themes.
+- Added a stable sample plan with six categories and fifty goals; the home screen shows only pinned goals, while long categories initially show six items and progressively reveal the remainder.
+- Implemented category and goal create, edit, delete, reorder, cross-category move, and pin flows, together with cross-category search, pinned management, tax-profile settings, and a complete tax breakdown.
+- Added the native IndexedDB `LocalPlanRepository`, an in-memory implementation of the same port, 250ms debounced saves, revision-conflict handling, and offline-state messaging; Firebase remains disconnected.
+- Added repository-contract, domain-command, fifty-goal fixture, and planner-interaction coverage; all 32 tests across seven test files pass.
+- Verified real rendering at a 1440px desktop viewport, a 390px phone viewport, and a 320px narrow-phone viewport; fixed right-edge clipping in the mobile theme panel and restored the hidden mobile theme button's accessible name.
+- Fixed stale uncontrolled input values after asynchronous IndexedDB hydration and added a regression test that keeps a saved amount consistent with its derived totals.
+- Full `npm run verify` passed: TypeScript, ESLint, Prettier, 32 tests, production PWA build, architecture boundaries, PWA artifacts, and project documents.
+- Firebase was not connected, no deployment occurred, and the Phase 3 changes were not committed or pushed.
 
 ### 2026-09-30 — Phase 1 re-verified and Phase 2 domain delivered
 
