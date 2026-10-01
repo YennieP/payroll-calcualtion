@@ -14,4 +14,4 @@ Before a milestone handoff, commit, or deployment, run:
 npm run verify
 ```
 
-The full command runs type checking, linting, formatting, unit tests, a production build, architecture-boundary checks, PWA artifact checks, and project-document checks. Later phases will extend the same entry point with Firebase Emulator, cross-device, offline, and visual-regression checks.
+The full command runs type checking, linting, formatting, unit tests, a production build, architecture-boundary checks, PWA artifact checks, a real-Chrome offline reopen/edit check, the seven-theme browser font audit, and project-document checks. Later phases will extend the same entry point with Firebase Emulator, cross-device synchronization, and broader visual-regression checks.

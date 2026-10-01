@@ -29,6 +29,7 @@ if (requestedMode === "full") {
     ["Production build", npmCommand, ["run", "build"]],
     ["Architecture boundaries", process.execPath, ["scripts/checks/architecture-boundaries.mjs"]],
     ["PWA artifacts", process.execPath, ["scripts/checks/pwa-artifacts.mjs"]],
+    ["PWA offline browser", npmCommand, ["run", "test:pwa:browser"]],
     ["Browser font audit", npmCommand, ["run", "test:fonts:browser"]],
     ["Project documents", process.execPath, ["scripts/checks/project-docs.mjs"]],
   );

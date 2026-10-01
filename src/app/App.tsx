@@ -79,6 +79,7 @@ export function App({ repository: suppliedRepository, deviceId: suppliedDeviceId
     const snapshot = state.plan;
     const editSequence = state.editSequence;
     const timer = globalThis.setTimeout(() => {
+      dispatch({ type: "save-started" });
       repository
         .save(LOCAL_ACCOUNT_ID, snapshot, snapshot.revision)
         .then((result) => {

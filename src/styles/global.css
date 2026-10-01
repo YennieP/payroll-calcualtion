@@ -13,6 +13,7 @@
 body {
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: #3e0b20;
 }
@@ -74,6 +75,7 @@ button:disabled {
 
 .planner-stage {
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: clip;
   background:
     radial-gradient(
@@ -98,6 +100,7 @@ button:disabled {
   position: relative;
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: clip;
   color: var(--ink);
   background: var(--bg);
@@ -1584,6 +1587,84 @@ button:disabled {
   font-size: 10px;
 }
 
+.pwa-notice {
+  position: fixed;
+  z-index: 90;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: min(430px, calc(100vw - 36px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--top-line);
+  border-radius: var(--radius);
+  color: var(--panel-ink);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  box-shadow: 0 18px 55px #0007;
+  backdrop-filter: blur(18px);
+}
+
+.pwa-notice > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.pwa-notice strong {
+  font-family: var(--display-font);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pwa-notice span {
+  color: var(--top-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.pwa-notice button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--top-line);
+  border-radius: var(--radius);
+  color: var(--panel-ink);
+  background: var(--top-control);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pwa-notice .pwa-dismiss {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  color: var(--top-muted);
+  background: transparent;
+  font-size: 18px;
+}
+
+.pwa-notice.is-error {
+  border-color: color-mix(in srgb, #ff6078 60%, var(--top-line));
+}
+
+.pwa-notice.is-updating {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (display-mode: standalone) {
+  .topbar {
+    padding-top: max(clamp(12px, 1.1vw, 20px), env(safe-area-inset-top));
+    padding-right: max(clamp(20px, 4vw, 84px), env(safe-area-inset-right));
+    padding-left: max(clamp(20px, 4vw, 84px), env(safe-area-inset-left));
+  }
+
+  .planner-layout {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 .planner-app[data-theme^="violet-"] .primary-button {
   background: var(--accent2);
   box-shadow: 6px 6px 0 var(--accent);
@@ -1775,6 +1856,18 @@ button:disabled {
 }
 
 @media (max-width: 420px) {
+  .pwa-notice {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: calc(100vw - 20px);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .pwa-notice > div {
+    grid-column: 1 / -1;
+  }
+
   .compact-control b {
     display: none;
   }

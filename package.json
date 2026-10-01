@@ -19,6 +19,7 @@
     "fonts:sync": "node scripts/sync-font-assets.mjs",
     "test": "vitest run",
     "test:fonts:browser": "node scripts/checks/font-browser.mjs",
+    "test:pwa:browser": "node scripts/checks/pwa-browser.mjs",
     "test:watch": "vitest",
     "verify": "node scripts/verify.mjs --mode full",
     "verify:quick": "node scripts/verify.mjs --mode quick"

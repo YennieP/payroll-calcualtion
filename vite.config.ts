@@ -10,7 +10,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["icons/app-icon.svg"],
+      includeAssets: ["icons/app-icon.svg", "icons/app-icon-192.png", "icons/app-icon-512.png"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,woff2,webmanifest}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -24,6 +24,24 @@ export default defineConfig({
         display: "standalone",
         start_url: "./",
         icons: [
+          {
+            src: "icons/app-icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "icons/app-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "icons/app-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
           {
             src: "icons/app-icon.svg",
             sizes: "any",

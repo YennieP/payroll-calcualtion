@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { THEME_OPTIONS } from "../features/planner/themeOptions";
+import { usePwaLifecycle } from "../pwa/usePwaLifecycle";
 import { loadAllFonts, type FontAuditFailure } from "./fontLoader";
 import {
   COMMON_CHINESE_FONT_SAMPLE,
@@ -11,6 +12,7 @@ import {
 type AuditStatus = "loading" | "passed" | "failed";
 
 export function FontAuditPage() {
+  usePwaLifecycle();
   const [status, setStatus] = useState<AuditStatus>("loading");
   const [failures, setFailures] = useState<readonly FontAuditFailure[]>([]);
 

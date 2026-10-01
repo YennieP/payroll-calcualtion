@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成         | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成         | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成         | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 4 已完成 | Phase 0 至 Phase 4 已完成；下一步进入可安装与完整离线能力。                                 |
+| 产品实现     | Phase 5 已完成 | PWA 安装资源、受控更新、手机安全区和两轮离线重开已通过本地自动核验；下一步为 Phase 6。      |
 | 部署         | 未开始         | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -133,6 +133,8 @@ React PWA
 
 ## Phase 5 — 实现可安装与离线能力
 
+状态：已于 2026-10-01 完成。Manifest、PNG/SVG 安装图标、Service Worker、应用外壳/字体预缓存、IndexedDB 本地存储、受控更新提示、独立显示适配和手机安全区均已接入正式页面。
+
 交付物：
 
 - 增加 Web App Manifest、图标、主题色和 Service Worker。
@@ -235,6 +237,16 @@ React PWA
 
 ## 更新日志
 
+### 2026-10-01 — 完成 Phase 5 可安装与离线 PWA
+
+- 增加 192px、512px 和 maskable PNG 安装图标，保留 SVG 图标，并补齐 Apple 主屏幕、独立显示和 `viewport-fit=cover` 元数据；Chrome 未报告由应用资源导致的可安装性错误。
+- 将 Service Worker 注册收口到 React 生命周期：首次缓存完成、浏览器安装、iOS 添加到主屏幕、新版本可用和注册失败均有轻量提示；每小时在线检查更新，新版本只能在本机修改保存后由用户确认载入。
+- 为独立显示模式增加顶部与底部安全区适配，PWA 提示在桌面和手机宽度均避开安全区，不改变已验收的顶栏、三栏信息架构和七主题。
+- 修复防抖保存未进入 `saving` 状态的问题，避免 Service Worker 在 IndexedDB 写入期间允许刷新页面。
+- 新增真实 Chrome PWA 核验：在线修改后关闭页面，离线重开，继续离线编辑，再次关闭并离线重开；两轮均保留业务数据和重新计算的 California 收入结果，Service Worker 持续控制页面，IndexedDB 始终只有一份最新规划文档。
+- 将 PWA 产物和真实离线流程纳入唯一完整本地门禁 `npm run verify`；PWA 单元测试覆盖安装事件、更新回调和保存状态门禁，最终完整门禁通过 TypeScript、ESLint、Prettier、41 个测试、582 个字体资产、生产 PWA、架构边界、PWA 离线 E2E、七主题离线字体和项目文档检查。
+- 实体 iOS Safari、Android Chrome 和生产安装仍按 Phase 8 在设备与生产地址可用时人工确认；自动 GitHub Actions 继续禁用，Firebase 仍未连接，也未部署。Phase 5 变更在重新审核和完整本地门禁通过后提交并推送。
+
 ### 2026-10-01 — 同步最终字体与全宽响应式布局
 
 - 用真正占满浏览器宽度的三栏网格替代固定 1180px 主体与外部舞台补边；1280px 参考列宽为约 `230 / 760 / 290px`，2000px 为 `360 / 1200 / 440px`，900px 及以下纵向排列。
@@ -334,14 +346,14 @@ Last updated: 2026-10-01
 
 ## Current status
 
-| Area                   | Status           | Evidence or next action                                                                                        |
-| ---------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| MVP product scope      | Complete         | California planning, 50-goal information architecture, and non-goals are agreed.                               |
-| Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
-| Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
-| Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 4 complete | Phases 0 through 4 are complete; installability and full offline behavior are next.                            |
-| Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
+| Area                   | Status           | Evidence or next action                                                                                                                 |
+| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete         | California planning, 50-goal information architecture, and non-goals are agreed.                                                        |
+| Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.                                 |
+| Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed.                          |
+| Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.                                |
+| Product implementation | Phase 5 complete | Install assets, controlled updates, phone safe areas, and two offline-reopen cycles pass local automated verification; Phase 6 is next. |
+| Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.                                 |
 
 ## Architecture baseline
 
@@ -461,6 +473,8 @@ Exit criteria:
 
 ## Phase 5 — Make the application installable and offline-capable
 
+Status: Complete on 2026-10-01. The production application now includes the manifest, PNG/SVG install icons, service worker, app-shell/font precache, IndexedDB local storage, controlled update prompts, standalone display adaptation, and phone safe areas.
+
 Deliverables:
 
 - Add the web app manifest, icons, theme colors, and service worker.
@@ -562,6 +576,16 @@ Exit criteria:
 10. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-01 — Phase 5 installable offline PWA completed
+
+- Added 192px, 512px, and maskable PNG install icons while retaining the SVG icon, plus Apple home-screen metadata, standalone metadata, and `viewport-fit=cover`; Chrome reports no installability errors caused by application resources.
+- Consolidated service-worker registration into a React lifecycle. Lightweight notices now cover initial offline readiness, browser installation, iOS home-screen instructions, available updates, and registration failures. The app checks for updates hourly while online, and a new version can load only after local edits have been saved and the user confirms it.
+- Added top and bottom safe-area handling for standalone display and kept PWA notices inside desktop and phone safe areas without changing the accepted top-bar, three-column information architecture, or seven themes.
+- Fixed debounced persistence so it enters the `saving` state, preventing service-worker refresh while an IndexedDB write is active.
+- Added a real-Chrome PWA check that edits online, closes and reopens offline, edits again offline, then closes and reopens offline a second time. Both cycles retain business data and recalculated California income; the service worker keeps controlling the page and IndexedDB contains exactly one latest plan document.
+- Added PWA artifacts and the real offline flow to the authoritative `npm run verify` gate. PWA unit coverage verifies the install event, update callback, and local-save gate; the final full gate passed TypeScript, ESLint, Prettier, 41 tests, 582 font assets, the production PWA, architecture boundaries, PWA offline E2E, seven-theme offline fonts, and project-document checks.
+- Physical-device installation on iOS Safari and Android Chrome, plus production installation, remains a Phase 8 manual check when devices and the production URL are available. Automatic GitHub Actions remain disabled; Firebase is still disconnected and nothing was deployed. The Phase 5 change was committed and pushed after re-review and the complete local gate passed.
 
 ### 2026-10-01 — Synced final typography and the full-width responsive layout
 

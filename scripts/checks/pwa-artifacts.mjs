@@ -19,9 +19,32 @@ if (!index.includes("/payroll-calcualtion/")) {
 const manifest = JSON.parse(readFileSync(join(root, "dist/manifest.webmanifest"), "utf8"));
 if (
   manifest.name !== "Worthwhile · California Income Planner" ||
-  manifest.display !== "standalone"
+  manifest.display !== "standalone" ||
+  manifest.start_url !== "./"
 ) {
-  console.error("PWA manifest is missing the expected product name or standalone display mode.");
+  console.error("PWA manifest is missing the expected identity, start URL, or display mode.");
+  process.exit(1);
+}
+
+const requiredIcons = [
+  ["icons/app-icon-192.png", "192x192", "any"],
+  ["icons/app-icon-512.png", "512x512", "any"],
+  ["icons/app-icon-512.png", "512x512", "maskable"],
+];
+for (const [src, sizes, purpose] of requiredIcons) {
+  if (
+    !manifest.icons?.some(
+      (icon) => icon.src === src && icon.sizes === sizes && icon.purpose === purpose,
+    ) ||
+    !existsSync(join(root, "dist", src))
+  ) {
+    console.error(`PWA install icon ${src} (${sizes}, ${purpose}) is missing.`);
+    process.exit(1);
+  }
+}
+
+if (!index.includes("viewport-fit=cover") || !index.includes("apple-touch-icon")) {
+  console.error("Production HTML is missing standalone safe-area or Apple install metadata.");
   process.exit(1);
 }
 
@@ -41,9 +64,11 @@ const acceptedFontDirectories = [
 ];
 if (
   !serviceWorker.includes(".woff2") ||
+  !serviceWorker.includes("icons/app-icon-192.png") ||
+  !serviceWorker.includes("icons/app-icon-512.png") ||
   acceptedFontDirectories.some((directory) => !serviceWorker.includes(`fonts/${directory}/`))
 ) {
-  console.error("PWA precache does not include the self-hosted font packages.");
+  console.error("PWA precache does not include install icons and self-hosted font packages.");
   process.exit(1);
 }
 

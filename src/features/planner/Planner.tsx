@@ -2,6 +2,7 @@ import type { Dispatch } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
 import { useThemeFonts } from "../../fonts/useThemeFonts";
+import { PwaStatus } from "../../pwa/PwaStatus";
 import { IncomePanel } from "./IncomePanel";
 import { MainViews } from "./MainViews";
 import { Navigation } from "./Navigation";
@@ -61,6 +62,7 @@ export function Planner(props: PlannerProps) {
           </div>
         ) : null}
       </div>
+      <PwaStatus saveStatus={state.saveStatus} />
     </div>
   );
 }

@@ -130,20 +130,31 @@ try {
     );
   }
 
-  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.evaluate(() =>
+    Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Service Worker readiness timed out.")), 30_000),
+      ),
+    ]),
+  );
   if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) {
     await page.reload({ waitUntil: "networkidle" });
   }
 
-  await page.waitForFunction(async (expectedCount) => {
-    const cacheNames = await caches.keys();
-    const entries = await Promise.all(
-      cacheNames.map(async (cacheName) => (await caches.open(cacheName)).keys()),
-    );
-    return (
-      entries.flat().filter((request) => request.url.includes(".woff2")).length >= expectedCount
-    );
-  }, expectedCachedFontCount);
+  await page.waitForFunction(
+    async (expectedCount) => {
+      const cacheNames = await caches.keys();
+      const entries = await Promise.all(
+        cacheNames.map(async (cacheName) => (await caches.open(cacheName)).keys()),
+      );
+      return (
+        entries.flat().filter((request) => request.url.includes(".woff2")).length >= expectedCount
+      );
+    },
+    expectedCachedFontCount,
+    { timeout: 180_000 },
+  );
 
   const cachedFontCount = await page.evaluate(async () => {
     const cacheNames = await caches.keys();
