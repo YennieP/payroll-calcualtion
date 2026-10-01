@@ -2,7 +2,41 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Phase 6 will replace this deny-all baseline with owner-scoped rules and emulator tests.
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function hasValidPlanShape() {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion',
+          'planId',
+          'revision',
+          'updatedAt',
+          'updatedByDevice',
+          'taxProfile',
+          'preferences',
+          'categories'
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.planId is string
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.updatedAt is string
+        && request.resource.data.updatedByDevice is string
+        && request.resource.data.taxProfile is map
+        && request.resource.data.preferences is map
+        && request.resource.data.categories is list;
+    }
+
+    match /plans/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && hasValidPlanShape();
+      allow update: if isOwner(userId)
+        && hasValidPlanShape()
+        && request.resource.data.revision > resource.data.revision;
+      allow delete: if isOwner(userId);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

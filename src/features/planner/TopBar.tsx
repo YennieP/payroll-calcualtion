@@ -1,4 +1,4 @@
-import type { Dispatch } from "react";
+import type { Dispatch, ReactNode } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
 import type { FilingStatus } from "../../domain/plan";
@@ -10,6 +10,7 @@ interface TopBarProps {
   dispatch: Dispatch<AppAction>;
   createMetadata: () => { updatedAt: string; updatedByDevice: string };
   isOnline: boolean;
+  accountControl?: ReactNode;
 }
 
 const SAVE_LABELS: Record<AppState["saveStatus"], string> = {
@@ -21,7 +22,7 @@ const SAVE_LABELS: Record<AppState["saveStatus"], string> = {
   conflict: "检测到版本冲突",
 };
 
-export function TopBar({ state, dispatch, createMetadata, isOnline }: TopBarProps) {
+export function TopBar({ state, dispatch, createMetadata, isOnline, accountControl }: TopBarProps) {
   const theme = getThemeOption(state.plan.preferences.themeId);
   const profile = state.plan.taxProfile;
 
@@ -194,6 +195,8 @@ export function TopBar({ state, dispatch, createMetadata, isOnline }: TopBarProp
           </section>
         ) : null}
       </div>
+
+      {accountControl}
 
       <span
         className={`save-indicator is-${state.saveStatus}`}

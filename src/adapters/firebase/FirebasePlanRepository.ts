@@ -1,0 +1,71 @@
+import {
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  runTransaction,
+  type Firestore,
+} from "firebase/firestore";
+
+import { migratePlanDocument, parsePlanDocument } from "../../domain/plan";
+import type { PlanDocument } from "../../domain/plan";
+import type { RemotePlanRepository, RemoteSaveResult } from "../../ports/RemotePlanRepository";
+
+function readRemotePlan(value: unknown): PlanDocument {
+  return migratePlanDocument(value);
+}
+
+export class FirebasePlanRepository implements RemotePlanRepository {
+  constructor(private readonly firestore: Firestore) {}
+
+  private reference(accountId: string) {
+    return doc(this.firestore, "plans", accountId);
+  }
+
+  async load(accountId: string): Promise<PlanDocument | null> {
+    const snapshot = await getDoc(this.reference(accountId));
+    return snapshot.exists() ? readRemotePlan(snapshot.data()) : null;
+  }
+
+  async push(
+    accountId: string,
+    plan: PlanDocument,
+    expectedRemoteRevision: number,
+  ): Promise<RemoteSaveResult> {
+    parsePlanDocument(plan);
+    if (plan.revision <= expectedRemoteRevision) {
+      throw new Error("A remote push must advance the plan revision.");
+    }
+
+    return runTransaction(this.firestore, async (transaction) => {
+      const reference = this.reference(accountId);
+      const snapshot = await transaction.get(reference);
+      const remote = snapshot.exists() ? readRemotePlan(snapshot.data()) : null;
+      const actualRevision = remote?.revision ?? 0;
+      if (actualRevision !== expectedRemoteRevision) {
+        if (!remote) throw new Error("Remote revision conflict has no plan document.");
+        return { status: "conflict", remote } as const;
+      }
+      transaction.set(reference, { ...plan });
+      return { status: "saved", revision: plan.revision } as const;
+    });
+  }
+
+  subscribe(
+    accountId: string,
+    onRemoteChange: (plan: PlanDocument) => void,
+    onError: (error: Error) => void,
+  ): () => void {
+    return onSnapshot(
+      this.reference(accountId),
+      (snapshot) => {
+        if (snapshot.exists()) onRemoteChange(readRemotePlan(snapshot.data()));
+      },
+      (error) => onError(error),
+    );
+  }
+
+  async delete(accountId: string): Promise<void> {
+    await deleteDoc(this.reference(accountId));
+  }
+}

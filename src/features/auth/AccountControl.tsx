@@ -1,0 +1,279 @@
+import { useState, type ChangeEvent, type FormEvent } from "react";
+
+import type { Account, AuthProvider } from "../../ports/AuthProvider";
+import type { CloudSyncSnapshot } from "../../application/sync/SyncedPlanRepository";
+import { exportPlanJson } from "../../application/planTransfer";
+import type { PlanDocument } from "../../domain/plan";
+
+type AuthMode = "sign-in" | "register" | "reset";
+
+export interface AccountControlProps {
+  provider?: AuthProvider;
+  account: Account | null;
+  sync: CloudSyncSnapshot | null;
+  plan: PlanDocument;
+  onImportPlan: (source: string) => Promise<void>;
+  onDeletePlan: () => Promise<void>;
+  onSignOut?: () => Promise<void>;
+}
+
+const SYNC_LABELS: Record<CloudSyncSnapshot["status"], string> = {
+  connecting: "正在连接",
+  syncing: "正在同步",
+  synced: "云端已同步",
+  offline: "离线待同步",
+  error: "同步失败",
+  conflict: "同步冲突",
+};
+
+function readableAuthError(error: unknown): string {
+  if (!(error instanceof Error)) return "账户操作失败，请稍后重试。";
+  if (error.message.includes("auth/invalid-credential")) return "邮箱或密码不正确。";
+  if (error.message.includes("auth/email-already-in-use")) return "这个邮箱已经注册。";
+  if (error.message.includes("auth/weak-password")) return "密码至少需要 6 个字符。";
+  if (error.message.includes("auth/invalid-email")) return "请输入有效的邮箱地址。";
+  return "账户操作失败，请稍后重试。";
+}
+
+export function AccountControl({
+  provider,
+  account,
+  sync,
+  plan,
+  onImportPlan,
+  onDeletePlan,
+  onSignOut,
+}: AccountControlProps) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<AuthMode>("sign-in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [dataMessage, setDataMessage] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!provider) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (mode === "register") await provider.registerWithEmail(email, password);
+      else if (mode === "reset") {
+        await provider.sendPasswordResetEmail(email);
+        setMessage("重置邮件已发送，请检查收件箱。");
+      } else await provider.signInWithEmail(email, password);
+      if (mode !== "reset") setOpen(false);
+    } catch (error: unknown) {
+      setMessage(readableAuthError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signOut = async () => {
+    if (!onSignOut) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await onSignOut();
+      setOpen(false);
+    } catch (error: unknown) {
+      setMessage(readableAuthError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportPlan = () => {
+    const blob = new Blob([exportPlanJson(plan)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `worthwhile-plan-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setDataMessage("计划 JSON 已导出。文件仅保存在这台设备上。");
+  };
+
+  const importPlan = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setDataMessage(null);
+    try {
+      await onImportPlan(await file.text());
+      setDataMessage("计划已导入并保存为新的本机修改。");
+    } catch (error: unknown) {
+      setDataMessage(error instanceof Error ? error.message : "无法导入这个计划文件。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deletePlan = async () => {
+    setBusy(true);
+    setDataMessage(null);
+    try {
+      await onDeletePlan();
+      setConfirmDelete(false);
+      setDataMessage("原计划已删除。当前显示的是尚未保存的起始计划。");
+    } catch {
+      setDataMessage("删除失败，请稍后重试。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="topbar-control account-control">
+      <button
+        className="compact-control"
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span aria-hidden="true">◎</span>
+        <b>{account ? (account.email ?? "同步账户") : provider ? "跨设备同步" : "本机计划"}</b>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      {open ? (
+        <section className="account-panel" role="dialog" aria-label="账户与同步">
+          <header>
+            <div>
+              <strong>{account ? "账户与同步" : provider ? "跨设备同步" : "本机计划"}</strong>
+              <small>
+                {account && sync
+                  ? SYNC_LABELS[sync.status]
+                  : provider
+                    ? "邮箱登录后可在手机与电脑间同步"
+                    : "匿名使用，数据只保存在这台设备"}
+              </small>
+            </div>
+            <button type="button" aria-label="关闭账户面板" onClick={() => setOpen(false)}>
+              ×
+            </button>
+          </header>
+          {account ? (
+            <div className="account-summary">
+              <span>当前账户</span>
+              <strong>{account.email ?? "未提供邮箱"}</strong>
+              {sync?.error ? <p role="alert">{sync.error}</p> : null}
+              {onSignOut ? (
+                <button type="button" disabled={busy} onClick={() => void signOut()}>
+                  退出并清除此设备缓存
+                </button>
+              ) : null}
+            </div>
+          ) : provider ? (
+            <>
+              <div className="auth-tabs" role="tablist" aria-label="账户操作">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "sign-in"}
+                  onClick={() => setMode("sign-in")}
+                >
+                  登录
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "register"}
+                  onClick={() => setMode("register")}
+                >
+                  注册
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "reset"}
+                  onClick={() => setMode("reset")}
+                >
+                  重置密码
+                </button>
+              </div>
+              <form className="auth-form" onSubmit={(event) => void submit(event)}>
+                <label>
+                  <span>邮箱</span>
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                </label>
+                {mode !== "reset" ? (
+                  <label>
+                    <span>密码</span>
+                    <input
+                      type="password"
+                      autoComplete={mode === "register" ? "new-password" : "current-password"}
+                      minLength={6}
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                  </label>
+                ) : null}
+                {message ? (
+                  <p role={message.includes("已发送") ? "status" : "alert"}>{message}</p>
+                ) : null}
+                <button type="submit" disabled={busy}>
+                  {busy
+                    ? "请稍候…"
+                    : mode === "register"
+                      ? "创建账户"
+                      : mode === "reset"
+                        ? "发送重置邮件"
+                        : "登录并同步"}
+                </button>
+              </form>
+            </>
+          ) : null}
+          <section className="plan-data-tools" aria-label="计划数据管理">
+            <div>
+              <strong>数据管理</strong>
+              <small>导入前会验证格式；文件中包含你的私人规划数据。</small>
+            </div>
+            <div className="plan-data-actions">
+              <button type="button" disabled={busy} onClick={exportPlan}>
+                导出 JSON
+              </button>
+              <label aria-disabled={busy}>
+                导入 JSON
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  disabled={busy}
+                  onChange={(event) => void importPlan(event)}
+                />
+              </label>
+              {!confirmDelete ? (
+                <button type="button" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                  删除整份计划
+                </button>
+              ) : null}
+            </div>
+            {confirmDelete ? (
+              <div className="delete-confirmation" role="alert">
+                <p>这会删除当前本机计划；登录时也会删除云端副本。此操作无法撤销。</p>
+                <button type="button" disabled={busy} onClick={() => void deletePlan()}>
+                  确认删除
+                </button>
+                <button type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                  取消
+                </button>
+              </div>
+            ) : null}
+            {dataMessage ? <p role="status">{dataMessage}</p> : null}
+          </section>
+        </section>
+      ) : null}
+    </div>
+  );
+}

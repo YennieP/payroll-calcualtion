@@ -23,6 +23,12 @@ export class MemoryPlanRepository implements PlanRepository {
     return { status: "saved", revision: savedPlan.revision };
   }
 
+  async replace(accountId: string, plan: PlanDocument): Promise<void> {
+    parsePlanDocument(plan);
+    this.plans.set(accountId, plan);
+    this.subscribers.get(accountId)?.forEach((listener) => listener(plan));
+  }
+
   subscribe(accountId: string, onRemoteChange: (plan: PlanDocument) => void): () => void {
     const listeners = this.subscribers.get(accountId) ?? new Set();
     listeners.add(onRemoteChange);

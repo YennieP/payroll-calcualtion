@@ -31,6 +31,7 @@ if (requestedMode === "full") {
     ["PWA artifacts", process.execPath, ["scripts/checks/pwa-artifacts.mjs"]],
     ["PWA offline browser", npmCommand, ["run", "test:pwa:browser"]],
     ["Browser font audit", npmCommand, ["run", "test:fonts:browser"]],
+    ["Firebase Emulator", npmCommand, ["run", "test:firebase:emulator"]],
     ["Project documents", process.execPath, ["scripts/checks/project-docs.mjs"]],
   );
 }

@@ -98,6 +98,21 @@ export class LocalPlanRepository implements PlanRepository {
     }
   }
 
+  async replace(accountId: string, plan: PlanDocument): Promise<void> {
+    parsePlanDocument(plan);
+    const database = await this.openDatabase();
+    try {
+      const transaction = database.transaction(PLAN_STORE, "readwrite");
+      await requestResult(
+        transaction.objectStore(PLAN_STORE).put({ accountId, plan } as StoredPlan),
+      );
+      await transactionComplete(transaction);
+      this.notify(accountId, plan);
+    } finally {
+      database.close();
+    }
+  }
+
   subscribe(accountId: string, onRemoteChange: (plan: PlanDocument) => void): () => void {
     const listeners = this.subscribers.get(accountId) ?? new Set();
     listeners.add(onRemoteChange);

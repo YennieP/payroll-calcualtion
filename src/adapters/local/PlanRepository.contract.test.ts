@@ -46,6 +46,15 @@ function repositoryContract(name: string, createRepository: () => PlanRepository
       expect(result.status).toBe("conflict");
       if (result.status === "conflict") expect(result.remote.revision).toBe(1);
     });
+
+    it("replaces the local cache with an exact remote revision", async () => {
+      const repository = createRepository();
+      const plan = { ...createSamplePlan(DEVICE_ID), revision: 14 };
+
+      await repository.replace(ACCOUNT_ID, plan);
+
+      await expect(repository.load(ACCOUNT_ID)).resolves.toMatchObject({ revision: 14 });
+    });
   });
 }
 

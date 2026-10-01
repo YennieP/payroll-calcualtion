@@ -478,7 +478,8 @@ button:disabled {
 }
 
 .theme-panel,
-.tax-profile-panel {
+.tax-profile-panel,
+.account-panel {
   position: absolute;
   z-index: 40;
   top: 46px;
@@ -490,6 +491,296 @@ button:disabled {
   color: var(--ink);
   background: var(--surface);
   box-shadow: 0 18px 50px color-mix(in srgb, var(--bg) 52%, transparent);
+}
+
+.account-control > .compact-control {
+  max-width: clamp(150px, 14vw, 230px);
+}
+
+.account-control > .compact-control b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-panel {
+  width: min(360px, calc(100vw - 24px));
+  color: var(--ink);
+}
+
+.account-panel > header,
+.session-gate-card > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-panel > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.account-panel > header strong {
+  font-family: var(--display-font);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.account-panel > header small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.account-panel > header > button {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: transparent;
+  font-size: 20px;
+}
+
+.auth-tabs {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+
+.auth-tabs button {
+  min-height: 32px;
+  border: 0;
+  border-radius: max(0px, calc(var(--radius) - 4px));
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.auth-tabs button[aria-selected="true"] {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.auth-form,
+.account-summary {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.auth-form p,
+.account-summary p {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.auth-form > button,
+.account-summary > button,
+.session-gate-card button {
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line));
+  border-radius: var(--radius);
+  padding: 0 14px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.account-summary > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.account-summary > strong {
+  margin-top: -7px;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.account-summary > button {
+  color: var(--ink);
+  background: transparent;
+}
+
+.plan-data-tools {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.plan-data-tools > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.plan-data-tools strong {
+  font-family: var(--display-font);
+  font-size: 15px;
+}
+
+.plan-data-tools small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.plan-data-actions {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.plan-data-actions button,
+.plan-data-actions label,
+.delete-confirmation button {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 9px;
+  color: var(--ink);
+  background: transparent;
+  font-size: 10px;
+  text-align: center;
+}
+
+.plan-data-actions button:last-child {
+  grid-column: 1 / -1;
+  color: var(--accent);
+}
+
+.plan-data-actions label[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.plan-data-actions input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.delete-confirmation {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.delete-confirmation p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.delete-confirmation button:first-of-type {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.plan-data-tools > p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.session-gate {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 5vw, 72px);
+  color: var(--ink);
+}
+
+.session-gate-card {
+  width: min(100%, 620px);
+  padding: clamp(28px, 5vw, 56px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 28px 90px color-mix(in srgb, var(--bg) 66%, transparent);
+}
+
+.session-gate-card > span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.session-gate-card h1 {
+  margin: 12px 0;
+  color: var(--ink);
+  font-family: var(--display-font);
+  font-size: clamp(34px, 6vw, 64px);
+  font-weight: 500;
+  line-height: 0.98;
+}
+
+.session-gate-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.session-gate-card > div {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.session-gate-card > div button + button,
+.session-gate-card > button {
+  color: var(--ink);
+  background: transparent;
+}
+
+.session-gate-card > button {
+  margin-top: 24px;
 }
 
 .theme-panel > header,
@@ -1696,6 +1987,15 @@ button:disabled {
     width: 180px;
   }
 
+  .account-control > .compact-control {
+    max-width: 44px;
+  }
+
+  .account-control > .compact-control b,
+  .account-control > .compact-control span:last-child {
+    display: none;
+  }
+
   .planner-nav {
     padding-inline: 8px;
   }
@@ -1737,7 +2037,7 @@ button:disabled {
   .topbar {
     min-height: 124px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     gap: 9px;
     padding: 12px;
     background: var(--bg);
@@ -1771,6 +2071,10 @@ button:disabled {
     grid-column: 3;
   }
 
+  .account-control {
+    grid-column: 4;
+  }
+
   .control-prefix,
   .save-indicator {
     display: none;
@@ -1786,8 +2090,14 @@ button:disabled {
     overflow-y: auto;
   }
 
-  .tax-profile-panel {
+  .tax-profile-panel,
+  .account-panel {
+    position: fixed;
+    top: 64px;
+    right: 12px;
     width: min(320px, calc(100vw - 24px));
+    max-height: calc(100dvh - 76px);
+    overflow-y: auto;
   }
 
   .planner-layout {
@@ -1870,6 +2180,33 @@ button:disabled {
 
   .compact-control b {
     display: none;
+  }
+
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .logo > span {
+    display: none;
+  }
+
+  .account-control > .compact-control {
+    max-width: 38px;
+    padding-inline: 9px;
+  }
+
+  .account-control > .compact-control span:last-child {
+    display: none;
+  }
+
+  .profile-control .compact-control {
+    max-width: 102px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-gate-card > div {
+    display: grid;
   }
 
   .theme-grid,

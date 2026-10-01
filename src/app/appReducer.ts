@@ -46,6 +46,8 @@ interface MutationActionBase {
 
 export type AppAction =
   | { type: "plan-loaded"; plan: PlanDocument; isNew: boolean }
+  | { type: "plan-imported"; plan: PlanDocument }
+  | { type: "plan-deleted"; replacement: PlanDocument }
   | { type: "storage-failed"; message: string }
   | { type: "navigate-pinned" }
   | { type: "navigate-category"; categoryId: string }
@@ -138,6 +140,28 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         plan: action.plan,
         saveStatus: action.isNew ? "local-change" : "saved",
         saveError: null,
+      };
+    case "plan-imported":
+      return {
+        ...state,
+        plan: action.plan,
+        activeCategoryId: null,
+        searchQuery: "",
+        saveStatus: "local-change",
+        saveError: null,
+        conflictingPlan: null,
+        editSequence: state.editSequence + 1,
+      };
+    case "plan-deleted":
+      return {
+        ...state,
+        plan: action.replacement,
+        activeCategoryId: null,
+        searchQuery: "",
+        saveStatus: "saved",
+        saveError: null,
+        conflictingPlan: null,
+        editSequence: state.editSequence + 1,
       };
     case "storage-failed":
       return { ...state, saveStatus: "error", saveError: action.message };

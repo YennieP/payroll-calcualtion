@@ -6,14 +6,14 @@
 
 ## 当前状态
 
-| 领域         | 状态           | 证据或下一步                                                                                |
-| ------------ | -------------- | ------------------------------------------------------------------------------------------- |
-| MVP 产品范围 | 已完成         | 已对齐 California 收入规划、50 项目标的信息架构和明确不做项。                               |
-| 视觉方向     | 已完成         | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
-| 技术架构     | 已完成         | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
-| 仓库治理     | 已完成         | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 5 已完成 | PWA 安装资源、受控更新、手机安全区和两轮离线重开已通过本地自动核验；下一步为 Phase 6。      |
-| 部署         | 未开始         | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
+| 领域         | 状态           | 证据或下一步                                                                                         |
+| ------------ | -------------- | ---------------------------------------------------------------------------------------------------- |
+| MVP 产品范围 | 已完成         | 已对齐 California 收入规划、50 项目标的信息架构和明确不做项。                                        |
+| 视觉方向     | 已完成         | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                                       |
+| 技术架构     | 已完成         | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。          |
+| 仓库治理     | 已完成         | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                                     |
+| 产品实现     | Phase 6 已完成 | 邮箱认证、本地计划导入、Firestore 同步、冲突处理和跨设备验证已通过完整本地门禁；下一步进入 Phase 7。 |
+| 部署         | 未开始         | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。                |
 
 ## 架构基线
 
@@ -152,6 +152,8 @@ React PWA
 
 ## Phase 6 — 增加身份与跨设备同步
 
+状态：已于 2026-10-01 完成。已建立可移植认证接口、持久化设备 ID 和本地优先同步编排，并接入 Firebase Auth/Firestore；生产 Firebase、部署和计费均未启用。
+
 交付物：
 
 - 增加与 Domain 隔离的 Firebase 客户端初始化。
@@ -236,6 +238,25 @@ React PWA
 10. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-01 — 完成 Phase 6 身份与跨设备同步
+
+- 增加可移植的 `AuthProvider`、`RemotePlanRepository`、`SyncStateStore`、`DeviceIdentity` 和 `CloudRuntime` 边界；Firebase SDK 仍只位于 adapter，配置为空时正式应用继续完整运行匿名本地模式，部分配置会 fail closed。
+- 接入 Firebase 邮箱注册、登录、密码重置、退出和 Firestore 单文档事务写入；稳定设备 ID、云端 revision、待同步 revision 和删除状态分别持久化，不把 Firebase 类型带入 Domain 或 UI。
+- 正式 UI 增加账户与同步面板、首次登录本机计划导入选择、同步状态、显式冲突选择、退出并清除此设备私人缓存，以及匿名和登录模式均可用的 JSON 导出、校验导入和整份计划删除。空云端账号的起始模板只存本机，首次编辑前不会自动创建云端文档。
+- 本地优先同步覆盖离线编辑、恢复联网后只推送最新计划、事务式 stale-revision 拒绝、远端接受与本地保留恢复路径；写入回声使用 `revision + updatedByDevice + updatedAt` 识别，两个设备产生相同 revision 时仍会保留本机离线版本并显式冲突。应用级假 runtime 覆盖首次导入、新设备下载、退出不删云端和两设备冲突恢复。
+- 增加 owner-scoped Firestore Rules，并将 Rules、邮箱认证、桌面/手机独立上下文、跨用户隔离和 stale revision 的 Emulator 测试纳入完整 `npm run verify`；Emulator 固定使用 `demo-worthwhile-local`，不会误连生产项目。
+- 当前 `npm run verify:quick` 通过 TypeScript、ESLint、Prettier、15 个测试文件共 61 项测试和 582 个字体资产；`npm audit --omit=dev` 为 0 漏洞。浏览器在 1440、390 和 320px 下复核账户面板与顶栏，均无横向溢出。
+- 已安装 Homebrew OpenJDK 21.0.12.1，并增加仓库启动器自动发现 `JAVA_HOME` 或 Homebrew JDK、仅为 Emulator 进程调整 `PATH`；Firebase Emulator Suite 已以 `demo-worthwhile-local` 启动 Auth 9099 和 Firestore 8080。Rules 与 adapter 测试共 2 个文件、3 项测试通过，包括 owner lifecycle、未认证与跨用户拒绝、stale/malformed revision 拒绝、邮箱认证和两个独立 Firebase context。
+- 完整 `npm run verify` 已全绿：15 个单元/应用测试文件共 61 项测试、生产构建、架构边界、PWA 产物、两轮离线重开、582 个字体资产和七主题桌面/手机字体审计均通过；真实 Chrome 的 1440×1000 桌面与 390×844 手机独立上下文完成同账号双向同步，并验证手机离线编辑在恢复联网后同步且无横向溢出。`npm audit --omit=dev` 为 0 漏洞；Firebase runtime chunk 的构建体积警告留给 Phase 7 性能审计，不阻断本阶段。
+- Phase 6 的全部退出条件已满足。未连接生产 Firebase、未部署、未启用计费，且本轮尚未 commit 或 push。
+
+### 2026-10-01 — 启动 Phase 6 身份与跨设备同步
+
+- Phase 5 已以 commit `a52ac7f` 推送到 `origin/main`，完整本地门禁通过，工作区以干净状态进入 Phase 6。
+- 本阶段按“认证端口与设备身份 → 本地优先同步编排 → Firebase 适配器 → owner-scoped Rules 与 Emulator/双上下文验证”的顺序实施。
+- Firebase SDK 只能位于 `src/adapters/firebase/` 和最小 bootstrap；应用无 Firebase 配置时必须继续以匿名本地模式完整运行。
+- 阶段启动时机器尚未提供 Java Runtime，因此当时把 Emulator 安全规则与跨用户隔离测试列为完成前的阻塞项；随后已安装 OpenJDK 21 并通过全部 Emulator 与跨设备验证。
 
 ### 2026-10-01 — 完成 Phase 5 可安装与离线 PWA
 
@@ -346,14 +367,14 @@ Last updated: 2026-10-01
 
 ## Current status
 
-| Area                   | Status           | Evidence or next action                                                                                                                 |
-| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| MVP product scope      | Complete         | California planning, 50-goal information architecture, and non-goals are agreed.                                                        |
-| Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.                                 |
-| Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed.                          |
-| Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.                                |
-| Product implementation | Phase 5 complete | Install assets, controlled updates, phone safe areas, and two offline-reopen cycles pass local automated verification; Phase 6 is next. |
-| Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.                                 |
+| Area                   | Status           | Evidence or next action                                                                                                                                         |
+| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete         | California planning, 50-goal information architecture, and non-goals are agreed.                                                                                |
+| Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.                                                         |
+| Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed.                                                  |
+| Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.                                                        |
+| Product implementation | Phase 6 complete | Email identity, local-plan import, Firestore synchronization, conflict handling, and cross-device verification passed the complete local gate; Phase 7 is next. |
+| Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.                                                         |
 
 ## Architecture baseline
 
@@ -492,6 +513,8 @@ Exit criteria:
 
 ## Phase 6 — Add identity and cross-device synchronization
 
+Status: Completed on 2026-10-01. Portable authentication, a persistent device ID, and local-first synchronization orchestration are implemented with Firebase Auth/Firestore adapters. Production Firebase, deployment, and billing remain disabled.
+
 Deliverables:
 
 - Add Firebase client bootstrap isolated from domain code.
@@ -576,6 +599,25 @@ Exit criteria:
 10. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-01 — Phase 6 identity and cross-device synchronization completed
+
+- Added portable `AuthProvider`, `RemotePlanRepository`, `SyncStateStore`, `DeviceIdentity`, and `CloudRuntime` boundaries. Firebase SDK use remains adapter-only; the production UI stays fully functional in anonymous local mode when configuration is absent, while partial configuration fails closed.
+- Integrated Firebase email registration, sign-in, password reset, sign-out, and transactional single-document Firestore writes. Stable device identity, remote revision, pending revision, and deletion state are persisted without exposing Firebase types to Domain or UI code.
+- Added the account and synchronization panel to the accepted UI, including explicit first-login local import, sync status, conflict choices, privacy-safe sign-out cleanup, and JSON export, validated import, and whole-plan deletion for both anonymous and authenticated modes. An empty signed-in account keeps its starting template local and creates no cloud document until the first edit.
+- The local-first flow now covers offline edits, latest-only reconnect flush, transactional stale-revision rejection, and both accept-remote and keep-local recovery. Write echoes are identified by `revision + updatedByDevice + updatedAt`, so equal revisions created by separate devices still preserve the offline local version and surface an explicit conflict. Application-level fake-runtime tests cover first import, new-device download, sign-out without cloud deletion, and two-device conflict recovery.
+- Added owner-scoped Firestore Rules and wired Rules, email identity, independent desktop/phone contexts, cross-user isolation, and stale-revision Emulator tests into the complete `npm run verify` gate. Emulator commands use `demo-worthwhile-local` to prevent accidental production access.
+- `npm run verify:quick` currently passes TypeScript, ESLint, Prettier, 61 tests across 15 files, and 582 font assets; `npm audit --omit=dev` reports zero vulnerabilities. Browser checks at 1440, 390, and 320px found no horizontal overflow in the updated top bar or account panel.
+- Homebrew OpenJDK 21.0.12.1 is installed. A repository launcher now discovers `JAVA_HOME` or the Homebrew JDK and adjusts `PATH` only for the Emulator process. Firebase Emulator Suite started against `demo-worthwhile-local` with Auth on 9099 and Firestore on 8080. Three Rules and adapter tests across two files passed, covering the owner lifecycle, unauthenticated and cross-user denial, stale/malformed revision denial, email identity, and two independent Firebase contexts.
+- The complete `npm run verify` gate is green: 61 unit/application tests across 15 files, production build, architecture boundaries, PWA artifacts, two offline reopen cycles, 582 font assets, and the seven-theme desktop/mobile font audit all passed. Independent real-Chrome contexts at 1440×1000 desktop and 390×844 phone sizes synchronized the same account in both directions, including an offline phone edit after reconnection, without horizontal overflow. `npm audit --omit=dev` reports zero vulnerabilities. The Firebase runtime chunk-size warning is deferred to the Phase 7 performance audit and does not block this phase.
+- Every Phase 6 exit criterion is satisfied. No production Firebase project was connected, nothing was deployed, billing remains disabled, and this work has not yet been committed or pushed.
+
+### 2026-10-01 — Phase 6 identity and cross-device synchronization started
+
+- Phase 5 was pushed to `origin/main` as commit `a52ac7f`; the complete local gate passed and Phase 6 starts from a clean working tree.
+- Work proceeds in this order: authentication port and device identity, local-first sync orchestration, Firebase adapters, then owner-scoped Rules with Emulator and two-context verification.
+- Firebase SDK use remains limited to `src/adapters/firebase/` and minimal bootstrap code. Without Firebase configuration, the application must continue to run completely in anonymous local mode.
+- At phase kickoff the machine had no Java Runtime, so Emulator security-rule and cross-user isolation checks were recorded as completion blockers. OpenJDK 21 was subsequently installed, and every Emulator and cross-device check passed.
 
 ### 2026-10-01 — Phase 5 installable offline PWA completed
 

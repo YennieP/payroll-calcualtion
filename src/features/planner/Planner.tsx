@@ -1,4 +1,4 @@
-import type { Dispatch } from "react";
+import type { Dispatch, ReactNode } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
 import { useThemeFonts } from "../../fonts/useThemeFonts";
@@ -14,6 +14,9 @@ interface PlannerProps {
   createId: () => string;
   createMetadata: () => { updatedAt: string; updatedByDevice: string };
   isOnline: boolean;
+  accountControl?: ReactNode;
+  onAcceptConflict?: () => void;
+  onKeepConflict?: () => void;
 }
 
 export function Planner(props: PlannerProps) {
@@ -31,13 +34,19 @@ export function Planner(props: PlannerProps) {
         {state.saveStatus === "conflict" ? (
           <section className="conflict-banner" role="alert">
             <div>
-              <strong>检测到另一份较新的本机版本</strong>
+              <strong>检测到另一份较新的计划版本</strong>
               <span>请选择保留当前修改，或载入另一份版本。系统不会静默覆盖。</span>
             </div>
-            <button type="button" onClick={() => dispatch({ type: "local-kept" })}>
+            <button
+              type="button"
+              onClick={props.onKeepConflict ?? (() => dispatch({ type: "local-kept" }))}
+            >
               保留当前修改
             </button>
-            <button type="button" onClick={() => dispatch({ type: "remote-accepted" })}>
+            <button
+              type="button"
+              onClick={props.onAcceptConflict ?? (() => dispatch({ type: "remote-accepted" }))}
+            >
               载入较新版本
             </button>
           </section>
