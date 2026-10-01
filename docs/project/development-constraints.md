@@ -68,6 +68,8 @@ The MVP must work on phones and desktop computers, synchronize data between them
 - Preserve all seven approved themes: Rouge Velvet, Blue Midnight, Violet/Amber, Violet/Crimson, Violet/Electric Blue, Gold Opera, and Scarlet Opera.
 - Theme changes must not modify plan data, navigation data, pin state, or calculation results.
 - Preserve the dark top bar, light or theme-specific center surface, side-panel relationships, and approved local gradient treatment.
+- On desktop, the application itself must span the browser width. Use the responsive three-column grid `clamp(210px, 18vw, 360px) minmax(0, 1fr) clamp(290px, 22vw, 440px)`; do not restore a fixed 1180 px application with stage-color or solid-color outer gutters.
+- Stack navigation, content, and income panels below 900 px. Column widths, padding, cards, tables, and typography must adapt without horizontal clipping.
 - Keep top-bar controls visually balanced with the 34 px logo mark.
 - The layout must remain clean with approximately 50 goals and must not clip, overlap, or overflow at supported widths.
 - All visible primary controls must either work in the MVP or be removed before release; decorative dead controls are not allowed.
@@ -75,16 +77,30 @@ The MVP must work on phones and desktop computers, synchronize data between them
 
 ## 5. Font constraints
 
-The following demo font families are product assets and must be preserved:
+The following accepted font families are product assets and must be preserved:
 
 - Bodoni Moda
-- Cormorant Garamond
-- Manrope
-- Space Grotesk
-- IBM Plex Sans SC
-- Noto Serif SC
 - ZCOOL XiaoWei
+- Cormorant Garamond
+- Zhuque Fangsong
+- DM Serif Display
+- Space Grotesk
 - ZCOOL QingKe HuangYou
+- Cinzel
+- Ma Shan Zheng
+- Libre Caslon Display
+- Long Cang
+
+The locked theme mapping is:
+
+- Rouge Velvet: Bodoni Moda + ZCOOL XiaoWei.
+- Blue Midnight: Cormorant Garamond + Zhuque Fangsong; numbers use DM Serif Display.
+- Violet/Amber and Violet/Electric Blue: Space Grotesk + ZCOOL QingKe HuangYou.
+- Violet/Crimson: Cinzel + Ma Shan Zheng.
+- Gold Opera: Cormorant Garamond + Zhuque Fangsong.
+- Scarlet Opera: Libre Caslon Display + Long Cang.
+
+No family may cover more than two themes. Italic, roman, and weight variants count as one family. Noto Sans SC, IBM Plex Sans SC, Manrope, LXGW WenKai, WenJin Mincho, and Noto Serif SC are rejected and must not remain in production assets or fallbacks.
 
 Font delivery requirements:
 

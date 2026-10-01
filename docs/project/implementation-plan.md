@@ -1,6 +1,6 @@
 # MVP 实施计划
 
-更新日期：2026-09-30
+更新日期：2026-10-01
 
 > 本文件先提供中文版，后附英文版。两种语言表达同一份计划；以后更新阶段状态、验收条件或范围时，必须同步更新两部分。若出现歧义，以中文版确认产品意图，以英文版辅助 Agent 和代码协作。
 
@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成         | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成         | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成         | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 3 进行中 | Phase 0、Phase 1 和 Phase 2 已完成；正在实现本地优先规划器与验收 UI。                       |
+| 产品实现     | Phase 4 已完成 | Phase 0 至 Phase 4 已完成；下一步进入可安装与完整离线能力。                                 |
 | 部署         | 未开始         | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -94,7 +94,7 @@ React PWA
 
 交付物：
 
-- 实现验收通过的顶栏、导航、中间内容、装饰轨和固定收入栏。
+- 实现验收通过的顶栏、导航、中间内容和收入栏。
 - 实现置顶主页和分类编辑页。
 - 实现分类和目标的新增、编辑、移动、排序、置顶和删除。
 - 实现跨分类搜索和渐进式列表展开。
@@ -111,13 +111,17 @@ React PWA
 
 ## Phase 4 — 复现主题与字体
 
+状态：已于 2026-10-01 按最终人工验收结果更新。
+
 交付物：
 
 - 将 7 套主题转换为语义化 CSS token。
-- 为全部验收字体自托管锁定版本的 WOFF2 文件和许可证。
+- 为最终 11 个验收字体家族自托管锁定版本的 WOFF2 文件和许可证。
 - 使用完整 Unicode 范围分包，不使用只包含 Demo 文案的删字子集。
 - 优先加载当前主题字体，并在浏览器空闲时缓存其他主题字体。
-- 保留验收通过的顶栏和侧栏局部渐变。
+- 使用占满浏览器宽度的响应式三栏；桌面列宽按 `clamp(210px, 18vw, 360px) / minmax(0, 1fr) / clamp(290px, 22vw, 440px)` 变化，900px 以下纵向排列。
+- 保留验收通过的顶栏和侧栏局部渐变，并让导航、中间页和收入栏自身覆盖页面，不使用固定 1180px 主体外的纯色或舞台色补边。
+- 锁定七主题字体映射；蓝午夜的中英文为 Cormorant Garamond + Zhuque Fangsong，数字独立使用 DM Serif Display。
 - 增加字体回退检测和视觉测试样例。
 
 退出条件：
@@ -209,7 +213,7 @@ React PWA
 - [x] 50 项目标仍然整洁、可操作。
 - [x] 置顶、分类、搜索和税务资料流程端到端可用。
 - [x] 所有相关输入都会更新收入结果。
-- [ ] 7 套主题不改变数据并使用预期字体。
+- [x] 7 套主题不改变数据并使用预期字体。
 - [ ] PWA 可以安装并离线重新打开。
 - [ ] Firestore Rules 阻止跨用户访问。
 - [x] 税务数据年份和限制清晰可见。
@@ -230,6 +234,34 @@ React PWA
 10. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-01 — 同步最终字体与全宽响应式布局
+
+- 用真正占满浏览器宽度的三栏网格替代固定 1180px 主体与外部舞台补边；1280px 参考列宽为约 `230 / 760 / 290px`，2000px 为 `360 / 1200 / 440px`，900px 及以下纵向排列。
+- 左栏、中栏、右栏、顶栏、内边距、卡片、表格列宽和字号共同参与响应式变化；三栏分别使用多层渐变、光晕与细纹理，不用纯色填充左右空白。
+- 按最终人工验收锁定 11 个字体家族和七主题映射；中文与英文在同一主题内保持统一气质，蓝午夜数字单独使用 DM Serif Display。
+- 删除 Manrope、IBM Plex Sans SC 和 Noto Serif SC 依赖及生成资产；字体同步现在会先清除过时家族目录，再生成 582 个 WOFF2-only 文件及许可证。
+- 浏览器核验改为读取实际字体资产数量，并检查 1280px、1440px、2000px 的全宽三栏、900px 纵向布局、390px 手机无溢出、七主题字体和蓝午夜数字例外。
+- 本轮修改尚未 commit、push 或部署；Firebase 仍未连接。
+
+### 2026-09-30 — 修复正式页面与验收 Demo 的字体比例偏差
+
+- 将页面眉题、主题说明、导航金额、导航页脚、统计标签、统计金额和收入大数字恢复为验收 Demo 的字号；桌面年薪恢复为 48px，平板恢复为 39px。
+- 将目标名称从额外加粗的 600 恢复为 400，并将目标行垂直间距和来源控件字号恢复为 Demo 数值，避免正式页面显得更小、更拥挤或更粗重。
+- 在真实 Chrome 核验中增加 computed-style 断言，固定上述 typography 数值，并覆盖 1440px 桌面、900px 平板和 390px 手机视口。
+- 逐一切换 7 套主题后，规划数据保持不变，三个视口均无横向溢出；桌面和手机截图未发现文字遮挡或组件越界。
+- 完整 `npm run verify` 通过；本次修复未改变字体家族、主题颜色、税务计算或数据结构，且尚未 commit 或 push。
+
+### 2026-09-30 — 完成 Phase 4 主题与字体复现
+
+- 将 8 个验收字体家族固定到 npm 锁定版本，并生成 415 个 WOFF2-only 自托管文件；每个家族目录均包含 OFL 1.1 许可证，中文字体保留完整 Unicode-range 分包而非 Demo 文案删字子集。
+- 为 Fontsource 变量字体建立与验收 CSS 一致的 family alias，保留 Bodoni Moda 和 Cormorant Garamond 的 normal/italic 变量字形、IBM Plex Sans SC 的完整 400/500 文件，以及 Noto Serif SC 的完整 400/500 分包。
+- 增加主题字体 manifest、当前主题优先加载、浏览器空闲预热和加载状态标记；字体失败不会被静默当作成功。
+- 增加 FontFaceSet 字形命中与 Canvas 栅格差异双重回退检测，并提供 `?font-audit=1` 七主题视觉 fixture，覆盖常用和罕见中文测试文本。
+- PWA precache 现包含全部 415 个 WOFF2 文件；真实 Chrome 自动化确认离线重开后字体审计仍通过。
+- Chrome 自动化逐一切换 7 套主题，确认房租数据保持不变，并验证 1440px 桌面与 390px 手机视口无横向溢出；人工式截图复核未发现遮挡、越界或不可读配色。
+- 完整 `npm run verify` 通过：TypeScript、ESLint、Prettier、35 个测试、字体资产检查、生产 PWA 构建、架构边界、PWA 产物、真实浏览器字体审计和项目文档检查。
+- Phase 3 已以 commit `0fffef6` 推送到 `origin/main`；本次 Phase 4 修改尚未 commit 或 push。Firebase 仍未连接，也未部署。
 
 ### 2026-09-30 — 完成 Phase 3 本地优先规划器
 
@@ -298,18 +330,18 @@ React PWA
 
 # English version
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 
 ## Current status
 
-| Area                   | Status              | Evidence or next action                                                                                        |
-| ---------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| MVP product scope      | Complete            | California planning, 50-goal information architecture, and non-goals are agreed.                               |
-| Visual direction       | Complete            | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
-| Architecture           | Complete            | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
-| Repository governance  | Complete            | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 3 in progress | Phases 0, 1, and 2 are complete; the local-first planner and accepted UI are underway.                         |
-| Deployment             | Not started         | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
+| Area                   | Status           | Evidence or next action                                                                                        |
+| ---------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete         | California planning, 50-goal information architecture, and non-goals are agreed.                               |
+| Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
+| Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
+| Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
+| Product implementation | Phase 4 complete | Phases 0 through 4 are complete; installability and full offline behavior are next.                            |
+| Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
 
 ## Architecture baseline
 
@@ -390,7 +422,7 @@ Status: Complete on 2026-09-30.
 
 Deliverables:
 
-- Implement the accepted top bar, navigation, central content, decorative rail, and persistent income panel.
+- Implement the accepted top bar, navigation, central content, and persistent income panel.
 - Implement pinned home and category editing screens.
 - Implement category and goal create, edit, move, order, pin, and delete flows.
 - Implement cross-category search and progressive list reveal.
@@ -407,13 +439,17 @@ Exit criteria:
 
 ## Phase 4 — Reproduce themes and fonts
 
+Status: Updated to the final manual acceptance on 2026-10-01.
+
 Deliverables:
 
 - Convert the seven themes into semantic CSS tokens.
-- Self-host pinned WOFF2 files and licenses for all accepted font families.
+- Self-host pinned WOFF2 files and licenses for the final eleven accepted font families.
 - Use complete Unicode-range packages rather than demo-text-only subsets.
 - Load active-theme fonts first and cache remaining theme fonts while idle.
-- Preserve the accepted local top-bar and side-panel gradients.
+- Use a browser-width responsive grid with desktop columns `clamp(210px, 18vw, 360px) / minmax(0, 1fr) / clamp(290px, 22vw, 440px)` and stack the panels below 900px.
+- Preserve the accepted local top-bar and side-panel gradients while having the navigation, center, and income panels cover the page themselves; do not add solid or stage-color gutters around a fixed 1180px application.
+- Lock the seven-theme font mapping; Blue Midnight uses Cormorant Garamond + Zhuque Fangsong for text and DM Serif Display for numbers.
 - Add automatic font-fallback detection and visual fixtures.
 
 Exit criteria:
@@ -505,7 +541,7 @@ Exit criteria:
 - [x] Fifty goals remain clean and usable.
 - [x] Pinned, category, search, and tax-profile flows work end to end.
 - [x] Income results update from every relevant input.
-- [ ] Seven themes preserve data and render their intended fonts.
+- [x] Seven themes preserve data and render their intended fonts.
 - [ ] The PWA installs and reopens offline.
 - [ ] Firestore rules prevent cross-user access.
 - [x] Tax source years and limitations are visible.
@@ -526,6 +562,34 @@ Exit criteria:
 10. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-01 — Synced final typography and the full-width responsive layout
+
+- Replaced the fixed 1180px application and outer stage gutters with a real browser-width three-column grid; reference columns are approximately `230 / 760 / 290px` at 1280px and `360 / 1200 / 440px` at 2000px, with vertical stacking at 900px and below.
+- Navigation, center content, income panel, top bar, padding, cards, table columns, and typography now adapt together. Each panel uses layered gradients, glows, and subtle texture rather than a solid color filling unused outer space.
+- Locked eleven font families and the final seven-theme mapping from manual acceptance. Chinese and English typography share a coherent character inside each theme, while Blue Midnight numbers intentionally use DM Serif Display.
+- Removed Manrope, IBM Plex Sans SC, and Noto Serif SC dependencies and generated assets. Font synchronization now clears obsolete family directories before producing 582 WOFF2-only files and their licenses.
+- Browser checks now derive the expected cache count from generated assets and cover full-width geometry at 1280px, 1440px, and 2000px, the 900px stacked layout, 390px mobile overflow, all seven theme families, and the Blue Midnight number exception.
+- These changes remain uncommitted, unpushed, and undeployed; Firebase remains disconnected.
+
+### 2026-09-30 — Corrected production typography to match the accepted demo
+
+- Restored the accepted-demo sizes for page eyebrows, theme descriptions, navigation amounts and footers, summary labels and values, and the income headline; annual income is again 48px on desktop and 39px at tablet widths.
+- Returned goal names from the unintended 600 weight to 400 and restored the demo's goal-row spacing and source-control size so the production UI no longer appears smaller, denser, or heavier.
+- Added computed-style assertions to the real-Chrome audit and covered 1440px desktop, 900px tablet, and 390px phone viewports.
+- After switching through all seven themes, planner data remained unchanged and no horizontal overflow, text obstruction, or component clipping appeared at any checked viewport.
+- Full `npm run verify` passed; this correction changed no font family, theme color, tax calculation, or data structure, and remains uncommitted and unpushed.
+
+### 2026-09-30 — Phase 4 themes and fonts reproduced
+
+- Pinned all eight accepted font families through the npm lockfile and generated 415 self-hosted WOFF2-only files; every family directory includes its OFL 1.1 license, and Chinese fonts retain complete Unicode-range packages instead of demo-text-only subsets.
+- Added accepted-CSS family aliases for Fontsource variable fonts, retained normal/italic variable faces for Bodoni Moda and Cormorant Garamond, complete 400/500 IBM Plex Sans SC files, and complete 400/500 Noto Serif SC packages.
+- Added a theme-font manifest, active-theme-first loading, browser-idle warming, and observable load states; a font failure is never silently reported as success.
+- Added dual FontFaceSet glyph matching and Canvas raster-difference fallback detection, plus a seven-theme `?font-audit=1` visual fixture covering common and uncommon Chinese samples.
+- The PWA precache now includes all 415 WOFF2 files; real Chrome automation confirms the font audit still passes after an offline restart.
+- Chrome automation switches through all seven themes, confirms the rent value remains unchanged, and verifies no horizontal overflow at 1440px desktop and 390px phone viewports; screenshot inspection found no clipping, overlap, or unreadable color treatment.
+- Full `npm run verify` passed: TypeScript, ESLint, Prettier, 35 tests, font assets, production PWA build, architecture boundaries, PWA artifacts, real-browser font audit, and project documents.
+- Phase 3 was pushed to `origin/main` as commit `0fffef6`; the Phase 4 changes remain uncommitted and unpushed. Firebase remains disconnected and nothing was deployed.
 
 ### 2026-09-30 — Phase 3 local-first planner delivered
 

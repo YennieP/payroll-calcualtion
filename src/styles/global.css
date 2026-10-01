@@ -1,7 +1,7 @@
 :root {
   color: #3a101d;
-  background: #210714;
-  font-family: Manrope, "IBM Plex Sans SC", system-ui, sans-serif;
+  background: #3e0b20;
+  font-family: "Bodoni Moda", "ZCOOL XiaoWei", Georgia, serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -14,7 +14,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: #210714;
+  background: #3e0b20;
 }
 
 button,
@@ -43,7 +43,7 @@ button:disabled {
   opacity: 0.45;
 }
 
-.planner-app {
+:is(.planner-stage, .planner-app) {
   --bg: #3e0b20;
   --surface: #fff4e7;
   --soft: #f1c6bd;
@@ -60,26 +60,52 @@ button:disabled {
   --top-control: color-mix(in srgb, var(--panel-ink) 8%, var(--bg));
   --top-line: color-mix(in srgb, var(--panel-ink) 26%, var(--bg));
   --top-muted: color-mix(in srgb, var(--panel-ink) 72%, var(--bg));
-  --left-col: 190px;
-  --right-col: 250px;
+  --left-col: clamp(210px, 18vw, 360px);
+  --right-col: clamp(290px, 22vw, 440px);
   --nav: #f1c6bd;
   --nav-ink: #3a101d;
   --nav-muted: #6f474b;
   --radius: 14px;
-  --rail: 36px;
-  --body-font: Manrope, "IBM Plex Sans SC", system-ui, sans-serif;
+  --rail: 0px;
+  --body-font: "Bodoni Moda", "ZCOOL XiaoWei", Georgia, serif;
   --display-font: "Bodoni Moda", "ZCOOL XiaoWei", Georgia, serif;
-  position: relative;
-  width: min(100%, 1180px);
+  --number-font: var(--display-font);
+}
+
+.planner-stage {
   min-height: 100vh;
-  margin-inline: auto;
+  overflow-x: clip;
+  background:
+    radial-gradient(
+      circle at 4% 20%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 96% 70%,
+      color-mix(in srgb, var(--accent2) 14%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(
+      96deg,
+      color-mix(in srgb, var(--nav) 32%, var(--bg)),
+      var(--bg) 36% 68%,
+      color-mix(in srgb, var(--panel) 38%, var(--bg))
+    );
+}
+
+.planner-app {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
   overflow: clip;
   color: var(--ink);
   background: var(--bg);
+  box-shadow: none;
   font-family: var(--body-font);
 }
 
-.planner-app[data-theme="midnight"] {
+:is(.planner-stage, .planner-app)[data-theme="midnight"] {
   --bg: #080b18;
   --surface: #10162f;
   --soft: #0a1025;
@@ -96,10 +122,12 @@ button:disabled {
   --nav-muted: #98a5cb;
   --radius: 16px;
   --rail: 0px;
-  --display-font: "Cormorant Garamond", "ZCOOL XiaoWei", Georgia, serif;
+  --body-font: "Cormorant Garamond", "Zhuque Fangsong", Georgia, serif;
+  --display-font: "Cormorant Garamond", "Zhuque Fangsong", Georgia, serif;
+  --number-font: "DM Serif Display", "Zhuque Fangsong", Georgia, serif;
 }
 
-.planner-app[data-theme^="violet-"] {
+:is(.planner-stage, .planner-app)[data-theme^="violet-"] {
   --bg: #080411;
   --surface: #171028;
   --soft: #0d0918;
@@ -116,21 +144,25 @@ button:disabled {
   --nav-muted: #bba9cc;
   --radius: 0px;
   --rail: 0px;
-  --body-font: "Space Grotesk", "IBM Plex Sans SC", system-ui, sans-serif;
+  --body-font: "Space Grotesk", "ZCOOL QingKe HuangYou", system-ui, sans-serif;
   --display-font: "Space Grotesk", "ZCOOL QingKe HuangYou", sans-serif;
+  --number-font: var(--display-font);
 }
 
-.planner-app[data-theme="violet-crimson"] {
+:is(.planner-stage, .planner-app)[data-theme="violet-crimson"] {
   --accent2: #ff6078;
   --panel: #511052;
+  --body-font: Cinzel, "Ma Shan Zheng", Georgia, serif;
+  --display-font: Cinzel, "Ma Shan Zheng", Georgia, serif;
+  --number-font: var(--display-font);
 }
 
-.planner-app[data-theme="violet-blue"] {
+:is(.planner-stage, .planner-app)[data-theme="violet-blue"] {
   --accent2: #54a8ff;
   --panel: #341676;
 }
 
-.planner-app[data-theme="gold-opera"] {
+:is(.planner-stage, .planner-app)[data-theme="gold-opera"] {
   --bg: #130713;
   --surface: #f1dfd0;
   --soft: #280d28;
@@ -148,11 +180,12 @@ button:disabled {
   --nav-muted: #d8bdca;
   --radius: 0px;
   --rail: 0px;
-  --body-font: "Cormorant Garamond", "Noto Serif SC", Georgia, serif;
-  --display-font: "Cormorant Garamond", "ZCOOL XiaoWei", Georgia, serif;
+  --body-font: "Cormorant Garamond", "Zhuque Fangsong", Georgia, serif;
+  --display-font: "Cormorant Garamond", "Zhuque Fangsong", Georgia, serif;
+  --number-font: var(--display-font);
 }
 
-.planner-app[data-theme="scarlet-opera"] {
+:is(.planner-stage, .planner-app)[data-theme="scarlet-opera"] {
   --bg: #170305;
   --surface: #f5ded4;
   --soft: #2a070b;
@@ -170,18 +203,133 @@ button:disabled {
   --nav-muted: #c8aaa3;
   --radius: 0px;
   --rail: 0px;
-  --body-font: "Bodoni Moda", "Noto Serif SC", Georgia, serif;
-  --display-font: "Bodoni Moda", "ZCOOL XiaoWei", Georgia, serif;
+  --body-font: "Libre Caslon Display", "Long Cang", Georgia, serif;
+  --display-font: "Libre Caslon Display", "Long Cang", Georgia, serif;
+  --number-font: var(--display-font);
+}
+
+.font-audit-page {
+  min-height: 100vh;
+  padding: clamp(24px, 4vw, 56px);
+  color: #fff4e8;
+  background: #130713;
+}
+
+.font-audit-header {
+  width: min(100%, 1180px);
+  margin: 0 auto 24px;
+}
+
+.font-audit-header p,
+.font-audit-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+
+.font-audit-header h1 {
+  margin: 0 0 10px;
+  font-size: clamp(32px, 5vw, 64px);
+  line-height: 0.96;
+}
+
+.font-audit-header output {
+  color: #dfbdca;
+  font-size: 13px;
+}
+
+.font-audit-grid {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.font-audit-card {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--bg) 36%, transparent);
+}
+
+.font-audit-card h2 {
+  margin: 0 0 16px;
+  color: var(--accent);
+  font-family: var(--display-font);
+  font-size: clamp(28px, 4vw, 46px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 0.95;
+}
+
+.font-audit-kicker {
+  color: var(--muted);
+}
+
+.font-audit-body,
+.font-audit-latin {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.font-audit-card dl {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.font-audit-card dl div {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.font-audit-card dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.font-audit-card dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.font-audit-failures {
+  width: min(100%, 1180px);
+  margin: 24px auto 0;
+  color: #ff9eaa;
+}
+
+@media (max-width: 700px) {
+  .font-audit-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .topbar {
   position: relative;
   z-index: 20;
-  min-height: 74px;
+  min-height: clamp(74px, 5vw, 96px);
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
+  padding: clamp(12px, 1.1vw, 20px) clamp(20px, 4vw, 84px);
   color: var(--panel-ink);
   background: linear-gradient(
     90deg,
@@ -235,7 +383,7 @@ button:disabled {
 }
 
 .search-control {
-  width: 230px;
+  width: min(100%, clamp(230px, 26vw, 520px));
   height: 34px;
   margin-left: auto;
   display: flex;
@@ -255,7 +403,7 @@ button:disabled {
   outline: 0;
   color: var(--panel-ink);
   background: transparent;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .search-control input::placeholder {
@@ -277,7 +425,7 @@ button:disabled {
   border-radius: var(--radius);
   color: var(--panel-ink);
   background: var(--top-control);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -309,7 +457,7 @@ button:disabled {
   align-items: center;
   gap: 6px;
   color: var(--top-muted);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
@@ -365,10 +513,23 @@ button:disabled {
 .tax-details-panel header strong {
   font-family: var(--display-font);
   font-size: 18px;
+}
+
+.theme-panel header strong {
+  font-weight: 400;
+}
+
+.tax-profile-panel header strong,
+.inline-panel header strong,
+.tax-details-panel header strong {
   font-weight: 500;
 }
 
-.theme-panel header small,
+.theme-panel header small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .tax-profile-panel header small,
 .tax-details-panel header small {
   color: var(--muted);
@@ -424,7 +585,7 @@ button:disabled {
   grid-column: 2;
   overflow: hidden;
   color: var(--soft-muted);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -582,8 +743,8 @@ button:disabled {
 
 .planner-layout {
   display: grid;
-  grid-template-columns: var(--left-col) minmax(0, 1fr) var(--rail) var(--right-col);
-  min-height: calc(100vh - 74px);
+  grid-template-columns: var(--left-col) minmax(0, 1fr) var(--right-col);
+  min-height: calc(100vh - clamp(74px, 5vw, 96px));
 }
 
 .planner-layout > * {
@@ -593,15 +754,31 @@ button:disabled {
 .planner-nav {
   display: flex;
   flex-direction: column;
-  padding: 19px 10px;
+  padding: clamp(22px, 2.4vw, 46px) clamp(16px, 2.6vw, 52px) 28px;
   border-right: 1px solid var(--line);
   color: var(--nav-ink);
-  background-color: var(--nav);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg) 12%, var(--nav)) 0,
-    var(--nav) 32px
-  );
+  background:
+    radial-gradient(
+      circle at 8% 8%,
+      color-mix(in srgb, var(--accent) 17%, transparent) 0 78px,
+      transparent 79px
+    ),
+    radial-gradient(
+      circle at 94% 74%,
+      color-mix(in srgb, var(--accent2) 11%, transparent),
+      transparent 30%
+    ),
+    repeating-linear-gradient(
+      132deg,
+      transparent 0 28px,
+      color-mix(in srgb, var(--nav-ink) 5%, transparent) 28px 29px
+    ),
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--nav) 88%, var(--surface)),
+      var(--nav) 62%,
+      color-mix(in srgb, var(--nav) 90%, var(--panel))
+    );
 }
 
 .planner-nav > header {
@@ -609,7 +786,7 @@ button:disabled {
   justify-content: space-between;
   padding: 0 8px 13px;
   color: var(--nav-muted);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.08em;
 }
 
@@ -646,7 +823,7 @@ button:disabled {
   border: 1px solid color-mix(in srgb, var(--accent2) 38%, transparent);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -655,7 +832,7 @@ button:disabled {
   display: grid;
   gap: 1px;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -663,14 +840,15 @@ button:disabled {
 
 .planner-nav small {
   color: var(--nav-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
 }
 
 .planner-nav em {
   max-width: 62px;
   overflow: hidden;
-  font-size: 9px;
+  font-size: 13px;
+  font-family: var(--number-font);
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -679,7 +857,7 @@ button:disabled {
 .planner-nav > p {
   margin: 16px 8px 6px;
   color: var(--accent);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.1em;
 }
 
@@ -690,27 +868,40 @@ button:disabled {
   padding: 13px 8px 0;
   border-top: 1px solid var(--line);
   color: var(--nav-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .planner-nav footer b {
   color: var(--nav-ink);
-  font-size: 11px;
+  font-family: var(--number-font);
+  font-size: 13px;
 }
 
 .planner-nav footer small {
-  font-size: 9px;
+  font-family: var(--number-font);
+  font-size: 12px;
 }
 
 .planner-main {
   min-height: 756px;
-  padding: 25px 27px;
-  background-color: var(--surface);
-  background-image: radial-gradient(
-    circle at 88% 7%,
-    color-mix(in srgb, var(--accent2) 16%, transparent) 0 48px,
-    transparent 49px
-  );
+  padding: clamp(28px, 3vw, 58px) clamp(30px, 4vw, 84px) clamp(36px, 4vw, 72px);
+  background:
+    radial-gradient(
+      circle at 88% 10%,
+      color-mix(in srgb, var(--accent2) 19%, transparent) 0 clamp(46px, 5vw, 86px),
+      transparent calc(clamp(46px, 5vw, 86px) + 1px)
+    ),
+    radial-gradient(
+      circle at 8% 82%,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      transparent 28%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 79px,
+      color-mix(in srgb, var(--line) 7%, transparent) 79px 80px
+    ),
+    linear-gradient(160deg, color-mix(in srgb, var(--surface) 96%, var(--accent2)), var(--surface));
 }
 
 .page-eyebrow {
@@ -720,7 +911,7 @@ button:disabled {
   padding-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--accent2) 50%, var(--line));
   color: var(--accent);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.12em;
 }
 
@@ -740,7 +931,7 @@ button:disabled {
 .page-title h1 {
   margin: 0;
   font-family: var(--display-font);
-  font-size: 58px;
+  font-size: clamp(52px, 4.8vw, 90px);
   font-weight: 400;
   line-height: 0.9;
   letter-spacing: -0.055em;
@@ -749,7 +940,7 @@ button:disabled {
 .page-title p {
   margin: 10px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .primary-button {
@@ -759,7 +950,7 @@ button:disabled {
   color: var(--accent-ink);
   background: var(--accent);
   box-shadow: 5px 5px 0 color-mix(in srgb, var(--accent2) 72%, transparent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -767,18 +958,18 @@ button:disabled {
 .summary-stats {
   display: grid;
   grid-template-columns: 0.8fr 1.2fr;
-  gap: 10px;
+  gap: clamp(10px, 1vw, 18px);
   margin-top: 23px;
 }
 
 .summary-stats article {
   min-width: 0;
-  min-height: 78px;
+  min-height: clamp(84px, 7vw, 126px);
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: baseline;
   gap: 4px;
-  padding: 13px;
+  padding: clamp(13px, 1.3vw, 24px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--soft-ink);
@@ -791,10 +982,14 @@ button:disabled {
   box-shadow: inset 0 -3px 0 var(--accent2);
 }
 
-.summary-stats span,
+.summary-stats span {
+  color: var(--soft-muted);
+  font-size: 12px;
+}
+
 .summary-stats small {
   color: var(--soft-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .summary-stats article:first-child span,
@@ -805,8 +1000,8 @@ button:disabled {
 .summary-stats strong {
   min-width: 0;
   overflow: hidden;
-  font-family: var(--display-font);
-  font-size: 31px;
+  font-family: var(--number-font);
+  font-size: clamp(35px, 2.8vw, 54px);
   font-weight: 400;
   text-overflow: ellipsis;
 }
@@ -818,7 +1013,7 @@ button:disabled {
 .table-head,
 .goal-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 95px 100px 28px;
+  grid-template-columns: minmax(0, 1fr) minmax(84px, 18%) minmax(86px, 14%) 28px;
   align-items: center;
   gap: 8px;
 }
@@ -829,15 +1024,15 @@ button:disabled {
   border-top: 2px solid var(--accent);
   border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 
 .goal-row {
   position: relative;
-  padding: 9px 5px;
+  padding: 11px 5px;
   border-bottom: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .goal-row:nth-child(even) {
@@ -876,12 +1071,12 @@ button:disabled {
   border: 0;
   color: var(--ink);
   background: transparent;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .goal-name-input {
   overflow: hidden;
-  font-weight: 600;
+  font-weight: 400;
   text-overflow: ellipsis;
 }
 
@@ -895,7 +1090,7 @@ button:disabled {
   border-radius: var(--radius);
   color: var(--soft-muted);
   background: var(--soft);
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
 }
 
@@ -907,9 +1102,11 @@ button:disabled {
   min-width: 0;
   display: flex;
   color: var(--muted);
+  font-family: var(--number-font);
 }
 
 .row-money-field input {
+  font-family: inherit;
   text-align: right;
 }
 
@@ -1077,6 +1274,7 @@ button:disabled {
 
 .pin-picker label small {
   color: var(--soft-muted);
+  font-family: var(--number-font);
 }
 
 .category-summary {
@@ -1115,7 +1313,7 @@ button:disabled {
 
 .category-summary strong {
   overflow: hidden;
-  font-family: var(--display-font);
+  font-family: var(--number-font);
   font-size: 16px;
   text-overflow: ellipsis;
 }
@@ -1174,23 +1372,36 @@ button:disabled {
 }
 
 .decor-rail {
-  background: var(--accent);
+  display: none;
 }
 
 .income-panel {
   position: relative;
   min-height: 756px;
-  padding: 31px 22px;
+  padding: clamp(28px, 3vw, 58px) clamp(24px, 3.2vw, 66px);
   color: var(--panel-ink);
-  background-image:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg) 20%, transparent) 0, transparent 32px),
+  background:
     radial-gradient(
-      circle at 84% 8%,
-      color-mix(in srgb, var(--accent2) 35%, transparent) 0 48px,
-      transparent 49px
+      circle at 78% 10%,
+      color-mix(in srgb, var(--accent2) 31%, transparent) 0 clamp(40px, 4vw, 72px),
+      transparent calc(clamp(40px, 4vw, 72px) + 1px)
     ),
-    linear-gradient(155deg, var(--panel), color-mix(in srgb, var(--panel) 78%, #090409));
-  box-shadow: inset 5px 0 0 color-mix(in srgb, var(--accent2) 72%, transparent);
+    radial-gradient(
+      circle at 18% 82%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 32%
+    ),
+    repeating-linear-gradient(
+      136deg,
+      transparent 0 34px,
+      color-mix(in srgb, var(--panel-ink) 4%, transparent) 34px 35px
+    ),
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--panel) 92%, var(--accent)),
+      color-mix(in srgb, var(--panel) 78%, var(--bg))
+    );
+  box-shadow: none;
 }
 
 .income-panel > span {
@@ -1198,21 +1409,21 @@ button:disabled {
   padding-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--accent2) 55%, transparent);
   color: var(--accent2);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.14em;
 }
 
 .income-panel > p {
-  margin: 42px 0 7px;
+  margin: clamp(38px, 5vh, 64px) 0 7px;
   color: color-mix(in srgb, var(--panel-ink) 68%, transparent);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .income-panel > strong {
   display: block;
   overflow-wrap: anywhere;
-  font-family: var(--display-font);
-  font-size: 45px;
+  font-family: var(--number-font);
+  font-size: clamp(48px, 4vw, 78px);
   font-weight: 400;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -1222,7 +1433,8 @@ button:disabled {
   display: block;
   margin-top: 9px;
   color: color-mix(in srgb, var(--panel-ink) 68%, transparent);
-  font-size: 10px;
+  font-size: 12px;
+  font-family: var(--number-font);
 }
 
 .income-meter {
@@ -1247,7 +1459,8 @@ button:disabled {
   gap: 6px 10px;
   margin-top: 9px;
   color: color-mix(in srgb, var(--panel-ink) 62%, transparent);
-  font-size: 9px;
+  font-size: 11px;
+  font-family: var(--number-font);
 }
 
 .income-legend span {
@@ -1277,7 +1490,7 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .income-panel dt {
@@ -1286,6 +1499,7 @@ button:disabled {
 
 .income-panel dd {
   margin: 0;
+  font-family: var(--number-font);
   text-align: right;
 }
 
@@ -1296,14 +1510,14 @@ button:disabled {
   border-radius: var(--radius);
   color: var(--panel-ink);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .income-panel > em {
   display: block;
   margin-top: 13px;
   color: color-mix(in srgb, var(--panel-ink) 48%, transparent);
-  font-size: 9px;
+  font-size: 11px;
   font-style: normal;
   text-align: center;
 }
@@ -1381,10 +1595,8 @@ button:disabled {
   font-style: italic;
 }
 
-@media (min-width: 701px) and (max-width: 1050px) {
+@media (min-width: 901px) and (max-width: 1050px) {
   .planner-app {
-    --left-col: 154px;
-    --right-col: 196px;
     --rail: 0px;
   }
 
@@ -1426,10 +1638,6 @@ button:disabled {
     padding-inline: 18px;
   }
 
-  .page-title h1 {
-    font-size: 48px;
-  }
-
   .table-head,
   .goal-row {
     grid-template-columns: minmax(0, 1fr) 74px 84px 26px;
@@ -1438,13 +1646,9 @@ button:disabled {
   .income-panel {
     padding-inline: 14px;
   }
-
-  .income-panel > strong {
-    font-size: 37px;
-  }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   .planner-app {
     --rail: 0px;
   }

@@ -11,6 +11,10 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       includeAssets: ["icons/app-icon.svg"],
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,woff2,webmanifest}"],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
       manifest: {
         name: "Worthwhile · California Income Planner",
         short_name: "Worthwhile",

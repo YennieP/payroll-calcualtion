@@ -19,8 +19,8 @@ The repository root [`AGENTS.md`](../../AGENTS.md) is the entry point for agents
 - Local operation: IndexedDB-backed local-first state and offline calculation.
 - Cloud model: one versioned plan document per user for the MVP.
 - Portability: domain-facing repository and authentication interfaces isolate Firebase.
-- Visual baseline: the user-approved three-column demo with pinned home, category view, persistent income panel, and seven themes.
-- Typography: all demo font families and required glyph coverage must be preserved.
+- Visual baseline: the user-approved browser-width responsive three-column layout with pinned home, category view, persistent income panel, and seven themes; panels stack at 900 px and below.
+- Typography: the final eleven-family theme mapping in `development-constraints.md` and its required glyph coverage must be preserved; Blue Midnight numbers use DM Serif Display.
 - Tax scope: California W-2 planning estimate with supported filing statuses and explicit rule-year metadata.
 
 ## Document update policy

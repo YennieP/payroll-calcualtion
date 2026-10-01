@@ -21,6 +21,7 @@ const steps = [
   ["ESLint", npmCommand, ["run", "lint"]],
   ["Prettier", npmCommand, ["run", "format:check"]],
   ["Unit tests", npmCommand, ["test"]],
+  ["Font assets", npmCommand, ["run", "fonts:check"]],
 ];
 
 if (requestedMode === "full") {
@@ -28,6 +29,7 @@ if (requestedMode === "full") {
     ["Production build", npmCommand, ["run", "build"]],
     ["Architecture boundaries", process.execPath, ["scripts/checks/architecture-boundaries.mjs"]],
     ["PWA artifacts", process.execPath, ["scripts/checks/pwa-artifacts.mjs"]],
+    ["Browser font audit", npmCommand, ["run", "test:fonts:browser"]],
     ["Project documents", process.execPath, ["scripts/checks/project-docs.mjs"]],
   );
 }
