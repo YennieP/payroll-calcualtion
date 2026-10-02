@@ -1,5 +1,18 @@
 import type { PlanDocument } from "../domain/plan/types";
 
+export type RemotePlanReadErrorKind = "unavailable" | "corrupt";
+
+export class RemotePlanReadError extends Error {
+  constructor(
+    readonly kind: RemotePlanReadErrorKind,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "RemotePlanReadError";
+  }
+}
+
 export interface RemotePlanTombstone {
   kind: "deleted";
   revision: number;
@@ -26,7 +39,7 @@ export interface RemotePlanRepository {
   subscribe(
     accountId: string,
     onRemoteChange: (snapshot: RemotePlanSnapshot) => void,
-    onError: (error: Error) => void,
+    onError: (error: RemotePlanReadError) => void,
   ): () => void;
   delete(accountId: string, tombstone: RemotePlanTombstone): Promise<RemoteDeleteResult>;
 }

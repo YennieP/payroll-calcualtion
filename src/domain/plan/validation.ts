@@ -1,4 +1,15 @@
 import { isNonNegativeSafeInteger } from "../shared/money";
+import { DEFAULT_TAX_RULE_SET_ID } from "../tax/rules/us-ca-w2-2026";
+import {
+  getSerializedPlanByteLength,
+  MAX_GOALS_PER_CATEGORY,
+  MAX_MONTHLY_GOAL_AMOUNT_CENTS,
+  MAX_MONTHLY_GOAL_TOTAL_CENTS,
+  MAX_MONTHLY_PRETAX_DEDUCTION_CENTS,
+  MAX_PLAN_CATEGORIES,
+  MAX_PLAN_GOALS,
+  MAX_PLAN_UTF8_BYTES,
+} from "./limits";
 import { CURRENT_PLAN_SCHEMA_VERSION } from "./types";
 import type { PlanDocument } from "./types";
 
@@ -23,6 +34,15 @@ const THEME_IDS = new Set([
 ]);
 const FILING_STATUSES = new Set(["single", "married", "head"]);
 const BUDGET_MODES = new Set(["monthly-fixed", "monthly-variable", "monthly-average"]);
+const CONSTRAINT_CODES = new Set([
+  "too_many_categories",
+  "too_many_goals_in_category",
+  "too_many_goals",
+  "plan_too_large",
+  "goal_amount_too_large",
+  "pretax_deduction_too_large",
+  "goal_total_too_large",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -30,6 +50,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function addIssue(issues: PlanValidationIssue[], path: string, code: string, message: string) {
   issues.push({ path, code, message });
+}
+
+function validateKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  path: string,
+  issues: PlanValidationIssue[],
+) {
+  const allowedKeys = new Set(allowed);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      addIssue(
+        issues,
+        path === "$" ? key : `${path}.${key}`,
+        "unexpected_field",
+        "Field is not supported.",
+      );
+    }
+  }
 }
 
 function validateUuid(
@@ -65,6 +104,12 @@ function validateGoal(
     addIssue(issues, path, "invalid_goal", "Must be an object.");
     return;
   }
+  validateKeys(
+    value,
+    ["id", "name", "monthlyAmountCents", "budgetMode", "pinned", "order"],
+    path,
+    issues,
+  );
   validateUuid(value.id, `${path}.id`, issues, seenIds);
   validateName(value.name, `${path}.name`, issues);
   if (!isNonNegativeSafeInteger(value.monthlyAmountCents)) {
@@ -73,6 +118,13 @@ function validateGoal(
       `${path}.monthlyAmountCents`,
       "invalid_money",
       "Must be a non-negative integer number of cents.",
+    );
+  } else if (Number(value.monthlyAmountCents) > MAX_MONTHLY_GOAL_AMOUNT_CENTS) {
+    addIssue(
+      issues,
+      `${path}.monthlyAmountCents`,
+      "goal_amount_too_large",
+      `Must not exceed ${MAX_MONTHLY_GOAL_AMOUNT_CENTS} cents per month.`,
     );
   }
   if (typeof value.budgetMode !== "string" || !BUDGET_MODES.has(value.budgetMode)) {
@@ -96,6 +148,7 @@ function validateCategory(
     addIssue(issues, path, "invalid_category", "Must be an object.");
     return;
   }
+  validateKeys(value, ["id", "name", "icon", "order", "goals"], path, issues);
   validateUuid(value.id, `${path}.id`, issues, seenIds);
   validateName(value.name, `${path}.name`, issues);
   if (typeof value.icon !== "string" || value.icon.trim().length === 0 || value.icon.length > 16) {
@@ -107,6 +160,14 @@ function validateCategory(
   if (!Array.isArray(value.goals)) {
     addIssue(issues, `${path}.goals`, "invalid_goals", "Must be an array.");
   } else {
+    if (value.goals.length > MAX_GOALS_PER_CATEGORY) {
+      addIssue(
+        issues,
+        `${path}.goals`,
+        "too_many_goals_in_category",
+        `A category may contain at most ${MAX_GOALS_PER_CATEGORY} goals.`,
+      );
+    }
     value.goals.forEach((goal, index) =>
       validateGoal(goal, `${path}.goals[${index}]`, issues, seenIds),
     );
@@ -120,6 +181,32 @@ export function validatePlanDocument(value: unknown): PlanValidationResult {
       ok: false,
       issues: [{ path: "$", code: "invalid_document", message: "Plan must be an object." }],
     };
+  }
+
+  validateKeys(
+    value,
+    [
+      "schemaVersion",
+      "planId",
+      "revision",
+      "updatedAt",
+      "updatedByDevice",
+      "taxProfile",
+      "preferences",
+      "categories",
+    ],
+    "$",
+    issues,
+  );
+
+  const serializedBytes = getSerializedPlanByteLength(value);
+  if (serializedBytes > MAX_PLAN_UTF8_BYTES) {
+    addIssue(
+      issues,
+      "$",
+      "plan_too_large",
+      `Canonical plan JSON must not exceed ${MAX_PLAN_UTF8_BYTES} UTF-8 bytes.`,
+    );
   }
 
   if (value.schemaVersion !== CURRENT_PLAN_SCHEMA_VERSION) {
@@ -149,6 +236,19 @@ export function validatePlanDocument(value: unknown): PlanValidationResult {
     addIssue(issues, "taxProfile", "invalid_tax_profile", "Must be an object.");
   } else {
     const profile = value.taxProfile;
+    validateKeys(
+      profile,
+      [
+        "state",
+        "filingStatus",
+        "monthlyPretaxDeductionCents",
+        "bufferBasisPoints",
+        "planningYear",
+        "taxRuleVersion",
+      ],
+      "taxProfile",
+      issues,
+    );
     if (profile.state !== "CA") {
       addIssue(issues, "taxProfile.state", "unsupported_state", "MVP supports CA only.");
     }
@@ -166,6 +266,13 @@ export function validatePlanDocument(value: unknown): PlanValidationResult {
         "taxProfile.monthlyPretaxDeductionCents",
         "invalid_money",
         "Must be a non-negative integer number of cents.",
+      );
+    } else if (Number(profile.monthlyPretaxDeductionCents) > MAX_MONTHLY_PRETAX_DEDUCTION_CENTS) {
+      addIssue(
+        issues,
+        "taxProfile.monthlyPretaxDeductionCents",
+        "pretax_deduction_too_large",
+        `Must not exceed ${MAX_MONTHLY_PRETAX_DEDUCTION_CENTS} cents per month.`,
       );
     }
     if (
@@ -187,28 +294,66 @@ export function validatePlanDocument(value: unknown): PlanValidationResult {
         "MVP supports planning year 2026 only.",
       );
     }
-    if (typeof profile.taxRuleVersion !== "string" || profile.taxRuleVersion.length === 0) {
+    if (profile.taxRuleVersion !== DEFAULT_TAX_RULE_SET_ID) {
       addIssue(
         issues,
         "taxProfile.taxRuleVersion",
         "invalid_tax_rule_version",
-        "Must identify a versioned tax rule set.",
+        `Must use the supported tax rule set ${DEFAULT_TAX_RULE_SET_ID}.`,
       );
     }
   }
 
   if (!isRecord(value.preferences)) {
     addIssue(issues, "preferences", "invalid_preferences", "Must be an object.");
-  } else if (
-    typeof value.preferences.themeId !== "string" ||
-    !THEME_IDS.has(value.preferences.themeId)
-  ) {
-    addIssue(issues, "preferences.themeId", "invalid_theme", "Unsupported theme.");
+  } else {
+    validateKeys(value.preferences, ["themeId"], "preferences", issues);
+    if (
+      typeof value.preferences.themeId !== "string" ||
+      !THEME_IDS.has(value.preferences.themeId)
+    ) {
+      addIssue(issues, "preferences.themeId", "invalid_theme", "Unsupported theme.");
+    }
   }
 
   if (!Array.isArray(value.categories)) {
     addIssue(issues, "categories", "invalid_categories", "Must be an array.");
   } else {
+    if (value.categories.length > MAX_PLAN_CATEGORIES) {
+      addIssue(
+        issues,
+        "categories",
+        "too_many_categories",
+        `A plan may contain at most ${MAX_PLAN_CATEGORIES} categories.`,
+      );
+    }
+    let totalGoals = 0;
+    let totalMonthlyGoalCents = 0;
+    for (const category of value.categories) {
+      if (!isRecord(category) || !Array.isArray(category.goals)) continue;
+      totalGoals += category.goals.length;
+      for (const goal of category.goals) {
+        if (isRecord(goal) && isNonNegativeSafeInteger(goal.monthlyAmountCents)) {
+          totalMonthlyGoalCents += Number(goal.monthlyAmountCents);
+        }
+      }
+    }
+    if (totalGoals > MAX_PLAN_GOALS) {
+      addIssue(
+        issues,
+        "categories",
+        "too_many_goals",
+        `A plan may contain at most ${MAX_PLAN_GOALS} goals.`,
+      );
+    }
+    if (totalMonthlyGoalCents > MAX_MONTHLY_GOAL_TOTAL_CENTS) {
+      addIssue(
+        issues,
+        "categories",
+        "goal_total_too_large",
+        `Monthly goal amounts must not exceed ${MAX_MONTHLY_GOAL_TOTAL_CENTS} cents in total.`,
+      );
+    }
     value.categories.forEach((category, index) =>
       validateCategory(category, `categories[${index}]`, issues, seenIds),
     );
@@ -229,8 +374,33 @@ export class PlanValidationError extends Error {
   }
 }
 
+function constraintMessage(issues: PlanValidationIssue[]): string {
+  const codes = new Set(issues.map((issue) => issue.code));
+  if (codes.has("plan_too_large"))
+    return "计划内容过多，最多可占用 256 KiB。请精简名称或项目后重试。";
+  if (codes.has("too_many_categories")) return "一个计划最多可包含 50 个分类。";
+  if (codes.has("too_many_goals_in_category")) return "每个分类最多可包含 200 个目标。";
+  if (codes.has("too_many_goals")) return "一个计划最多可包含 500 个目标。";
+  if (codes.has("goal_total_too_large")) return "全部目标的每月金额合计不能超过 $1,000,000。";
+  if (codes.has("goal_amount_too_large")) return "单个目标的每月金额不能超过 $500,000。";
+  if (codes.has("pretax_deduction_too_large")) return "每月税前扣除不能超过 $500,000。";
+  return "计划超出当前支持的容量范围。";
+}
+
+export class PlanConstraintError extends PlanValidationError {
+  constructor(issues: PlanValidationIssue[]) {
+    super(issues);
+    this.name = "PlanConstraintError";
+    this.message = constraintMessage(issues);
+  }
+}
+
 export function parsePlanDocument(value: unknown): PlanDocument {
   const result = validatePlanDocument(value);
-  if (!result.ok) throw new PlanValidationError(result.issues);
+  if (!result.ok) {
+    const constraintIssues = result.issues.filter((issue) => CONSTRAINT_CODES.has(issue.code));
+    if (constraintIssues.length > 0) throw new PlanConstraintError(constraintIssues);
+    throw new PlanValidationError(result.issues);
+  }
   return result.value;
 }

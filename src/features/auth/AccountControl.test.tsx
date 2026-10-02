@@ -2,12 +2,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Account, AuthProvider } from "../../ports/AuthProvider";
 import { createSamplePlan } from "../../application/samplePlan";
+import { MAX_MONTHLY_GOAL_AMOUNT_CENTS } from "../../domain/plan";
+import type { Account, AuthProvider } from "../../ports/AuthProvider";
 import { AccountControl } from "./AccountControl";
 
+const DEVICE_ID = "30000000-0000-4000-8000-000000000001";
 const ACCOUNT: Account = { id: "user-one", displayName: null, email: "planner@example.com" };
-const PLAN = createSamplePlan("30000000-0000-4000-8000-000000000001");
+const PLAN = createSamplePlan(DEVICE_ID);
 
 const DATA_PROPS = {
   saveStatus: "saved" as const,
@@ -62,7 +64,7 @@ describe("AccountControl", () => {
       <AccountControl
         provider={createAuthProvider()}
         account={ACCOUNT}
-        sync={{ status: "offline", error: null }}
+        sync={{ status: "offline", error: null, errorKind: null }}
         onSignOut={onSignOut}
         {...DATA_PROPS}
       />,
@@ -85,7 +87,7 @@ describe("AccountControl", () => {
       <AccountControl
         provider={createAuthProvider()}
         account={ACCOUNT}
-        sync={{ status: "synced", error: null }}
+        sync={{ status: "synced", error: null, errorKind: null }}
         onSignOut={onSignOut}
         {...DATA_PROPS}
       />,
@@ -103,7 +105,7 @@ describe("AccountControl", () => {
       <AccountControl
         provider={createAuthProvider()}
         account={ACCOUNT}
-        sync={{ status: "error", error: "Cloud unavailable." }}
+        sync={{ status: "error", error: "Cloud unavailable.", errorKind: "unavailable" }}
         onSignOut={onSignOut}
         {...DATA_PROPS}
       />,
@@ -118,7 +120,7 @@ describe("AccountControl", () => {
       <AccountControl
         provider={createAuthProvider()}
         account={ACCOUNT}
-        sync={{ status: "conflict", error: null }}
+        sync={{ status: "conflict", error: null, errorKind: null }}
         onSignOut={onSignOut}
         {...DATA_PROPS}
       />,
@@ -147,5 +149,30 @@ describe("AccountControl", () => {
     expect(onDeletePlan).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "确认删除" }));
     expect(onDeletePlan).toHaveBeenCalledOnce();
+  });
+
+  it("keeps safe sign-out available when export validation rejects the current plan", async () => {
+    const user = userEvent.setup();
+    const plan = createSamplePlan(DEVICE_ID);
+    plan.categories[0].goals[0].monthlyAmountCents = MAX_MONTHLY_GOAL_AMOUNT_CENTS + 1;
+
+    render(
+      <AccountControl
+        account={{ id: "account-one", email: "planner@example.com", displayName: null }}
+        sync={{ status: "offline", error: null, errorKind: null }}
+        saveStatus="local-change"
+        plan={plan}
+        onImportPlan={vi.fn(async () => undefined)}
+        onDeletePlan={vi.fn(async () => undefined)}
+        onSignOut={vi.fn(async () => undefined)}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    await user.click(screen.getByRole("button", { name: "先导出 JSON" }));
+
+    expect(screen.getByText("单个目标的每月金额不能超过 $500,000。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "继续编辑" })).toBeEnabled();
   });
 });

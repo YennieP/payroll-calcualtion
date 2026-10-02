@@ -1,11 +1,14 @@
+import { initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { deleteApp, initializeApp, type FirebaseApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
-import { afterAll, describe, expect, it } from "vitest";
+import { connectFirestoreEmulator, doc, getFirestore, setDoc } from "firebase/firestore";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FirebaseAuthProvider } from "../../src/adapters/firebase/FirebaseAuthProvider";
 import { FirebasePlanRepository } from "../../src/adapters/firebase/FirebasePlanRepository";
 import { createSamplePlan } from "../../src/application/samplePlan";
+import { MAX_MONTHLY_GOAL_AMOUNT_CENTS, PlanConstraintError } from "../../src/domain/plan";
+import { RemotePlanReadError } from "../../src/ports/RemotePlanRepository";
 
 const PROJECT_ID = "demo-worthwhile-local";
 const EMULATOR_CONFIG = {
@@ -16,6 +19,7 @@ const EMULATOR_CONFIG = {
 };
 
 const apps: FirebaseApp[] = [];
+let rulesEnvironment: RulesTestEnvironment;
 
 function createContext(name: string) {
   const app = initializeApp(EMULATOR_CONFIG, name);
@@ -30,11 +34,79 @@ function createContext(name: string) {
   };
 }
 
-afterAll(async () => {
-  await Promise.all(apps.map((app) => deleteApp(app)));
+beforeAll(async () => {
+  rulesEnvironment = await initializeTestEnvironment({ projectId: PROJECT_ID });
 });
 
+afterAll(async () => {
+  await Promise.all([...apps.map((app) => deleteApp(app)), rulesEnvironment.cleanup()]);
+});
+
+async function seedWithoutRules(accountId: string, value: unknown) {
+  await rulesEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "plans", accountId), value);
+  });
+}
+
 describe("Firebase adapters across independent contexts", () => {
+  it("rejects an out-of-contract plan before opening a Firestore transaction", async () => {
+    const context = createContext("capacity-context");
+    const invalid = { ...createSamplePlan("30000000-0000-4000-8000-000000000001"), revision: 1 };
+    invalid.categories[0].goals[0].monthlyAmountCents = MAX_MONTHLY_GOAL_AMOUNT_CENTS + 1;
+
+    await expect(context.plans.push("capacity-account", invalid, 0)).rejects.toBeInstanceOf(
+      PlanConstraintError,
+    );
+  });
+
+  it("classifies an over-limit cloud document as corrupt on initial load", async () => {
+    const context = createContext("corrupt-load-context");
+    const account = await context.auth.registerWithEmail("corrupt-load@example.test", "password");
+    const invalid = { ...createSamplePlan("30000000-0000-4000-8000-000000000001"), revision: 1 };
+    invalid.categories[0].goals[0].monthlyAmountCents = MAX_MONTHLY_GOAL_AMOUNT_CENTS + 1;
+    await seedWithoutRules(account.id, invalid);
+
+    await expect(context.plans.load(account.id)).rejects.toMatchObject({
+      name: "RemotePlanReadError",
+      kind: "corrupt",
+    });
+  });
+
+  it("routes subscription parse failures through the corrupt-data callback", async () => {
+    const context = createContext("corrupt-subscription-context");
+    const account = await context.auth.registerWithEmail(
+      "corrupt-subscription@example.test",
+      "password",
+    );
+    const invalid = {
+      ...createSamplePlan("30000000-0000-4000-8000-000000000001"),
+      revision: 1,
+      preferences: { themeId: "unknown-theme" },
+    };
+
+    const receivedError = new Promise<RemotePlanReadError>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("Timed out waiting for corrupt data.")),
+        5_000,
+      );
+      const unsubscribe = context.plans.subscribe(
+        account.id,
+        () => reject(new Error("Corrupt data reached the success callback.")),
+        (error) => {
+          clearTimeout(timeout);
+          unsubscribe();
+          resolve(error);
+        },
+      );
+    });
+    await seedWithoutRules(account.id, invalid);
+
+    await expect(receivedError).resolves.toMatchObject({
+      name: "RemotePlanReadError",
+      kind: "corrupt",
+    });
+  });
+
   it("authenticates one account twice, synchronizes revisions, and isolates another user", async () => {
     const desktop = createContext("desktop-context");
     const phone = createContext("phone-context");
@@ -114,7 +186,8 @@ describe("Firebase adapters across independent contexts", () => {
 
     await outsider.auth.registerWithEmail("outsider@example.test", password);
     await expect(outsider.plans.load(account.id)).rejects.toMatchObject({
-      code: "permission-denied",
+      name: "RemotePlanReadError",
+      kind: "unavailable",
     });
 
     await desktop.auth.signOut();

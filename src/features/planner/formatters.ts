@@ -28,5 +28,7 @@ export function formatPercent(ratio: number, fractionDigits = 1): string {
 
 export function dollarsToCents(value: string): number {
   const dollars = Number(value);
-  return Number.isFinite(dollars) ? Math.max(0, Math.round(dollars * 100)) : 0;
+  if (!Number.isFinite(dollars)) return 0;
+  const cents = Math.round(dollars * 100);
+  return Number.isSafeInteger(cents) ? Math.max(0, cents) : Number.MAX_SAFE_INTEGER;
 }

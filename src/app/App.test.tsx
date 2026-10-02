@@ -16,6 +16,7 @@ import type {
   RemotePlanTombstone,
   RemoteSaveResult,
 } from "../ports/RemotePlanRepository";
+import { RemotePlanReadError } from "../ports/RemotePlanRepository";
 import { App } from "./App";
 
 const DEVICE_ID = "30000000-0000-4000-8000-000000000001";
@@ -144,9 +145,19 @@ class FakeRemotePlanRepository implements RemotePlanRepository {
   pushCount = 0;
   pushBarrier: Promise<void> | null = null;
   pushError: Error | null = null;
+  private readonly loadErrors = new Map<string, Error[]>();
 
   async load(accountId: string): Promise<RemotePlanSnapshot | null> {
+    const errors = this.loadErrors.get(accountId);
+    const error = errors?.shift();
+    if (error) throw error;
     return this.snapshots.get(accountId) ?? null;
+  }
+
+  failNextLoad(accountId: string, error: Error) {
+    const errors = this.loadErrors.get(accountId) ?? [];
+    errors.push(error);
+    this.loadErrors.set(accountId, errors);
   }
 
   async push(
@@ -297,6 +308,25 @@ describe("local-first planner", () => {
     await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
   });
 
+  it("rejects an excessive amount without crashing or replacing the last valid value", async () => {
+    const { user } = await renderPlanner();
+    const amount = screen.getByRole("spinbutton", { name: "房租每月金额" });
+    const previousAmount = Number((amount as HTMLInputElement).value);
+
+    await user.clear(amount);
+    await user.type(amount, "500001");
+    await user.tab();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "单个目标的每月金额不能超过 $500,000。",
+    );
+    expect(screen.getByRole("spinbutton", { name: "房租每月金额" })).toHaveValue(previousAmount);
+    expect(screen.getByRole("heading", { name: "已置顶" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "知道了" }));
+    expect(screen.queryByText("这次修改没有保存")).not.toBeInTheDocument();
+  });
+
   it("edits tax settings, switches theme, and opens the detailed breakdown", async () => {
     const { user } = await renderPlanner();
 
@@ -376,6 +406,43 @@ describe("local-first planner", () => {
       expect(screen.getByRole("spinbutton", { name: "房租每月金额" })).toHaveValue(4567),
     );
     await expect(repository.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 3 });
+  });
+
+  it("blocks an empty device on a temporary cloud-load failure and can retry", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, plans } = createCloudRuntime();
+    plans.failNextLoad(
+      ACCOUNT.id,
+      new RemotePlanReadError("unavailable", "云端计划暂时无法读取，请检查网络后重试。"),
+    );
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+
+    expect(await screen.findByRole("heading", { name: "云端暂时无法读取" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "已置顶" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重新读取云端计划" }));
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+  });
+
+  it("keeps a valid account cache usable while reporting corrupt cloud data", async () => {
+    const repository = new MemoryPlanRepository();
+    const localPlan = { ...createSamplePlan(DEVICE_ID), revision: 2 };
+    await repository.replace(ACCOUNT.id, localPlan);
+    const { runtime, plans } = createCloudRuntime();
+    plans.failNextLoad(
+      ACCOUNT.id,
+      new RemotePlanReadError("corrupt", "云端计划的数据结构不兼容或已损坏，已停止自动载入。"),
+    );
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    expect(screen.getByText("同步失败")).toBeVisible();
+    expect(screen.getByText("云端计划的数据结构不兼容或已损坏，已停止自动载入。")).toBeVisible();
+    await expect(repository.load(ACCOUNT.id)).resolves.toEqual(localPlan);
   });
 
   it("keeps an empty signed-in starting plan local until the first edit", async () => {

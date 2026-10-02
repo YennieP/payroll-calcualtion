@@ -2,6 +2,9 @@ import type { Dispatch } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
 import {
+  countPlanGoals,
+  MAX_GOALS_PER_CATEGORY,
+  MAX_PLAN_GOALS,
   selectCategorySubtotalCents,
   selectPinnedSubtotalCents,
   selectTotalMonthlyGoalCents,
@@ -81,6 +84,7 @@ function SearchView({ state, dispatch, createMetadata }: MainViewsProps) {
                 categories={state.plan.categories}
                 dispatch={dispatch}
                 createMetadata={createMetadata}
+                constraintSequence={state.constraintSequence}
                 showSource
               />
             ))}
@@ -194,6 +198,7 @@ function PinnedView(props: MainViewsProps) {
               categories={state.plan.categories}
               dispatch={dispatch}
               createMetadata={createMetadata}
+              constraintSequence={state.constraintSequence}
               showSource
               isFirst={index === 0}
               isLast={index === pinned.length - 1}
@@ -235,7 +240,7 @@ function CategorySettings({
       <label>
         <span>名称</span>
         <input
-          key={`${category.id}:${category.name}`}
+          key={`${category.id}:${category.name}:${state.constraintSequence}`}
           defaultValue={category.name}
           maxLength={120}
           onBlur={(event) =>
@@ -252,7 +257,7 @@ function CategorySettings({
       <label>
         <span>标记</span>
         <input
-          key={`${category.id}:${category.icon}`}
+          key={`${category.id}:${category.icon}:${state.constraintSequence}`}
           defaultValue={category.icon}
           maxLength={4}
           onBlur={(event) =>
@@ -321,6 +326,9 @@ function CategoryView(props: MainViewsProps & { category: Category }) {
   const pinnedCount = category.goals.filter((goal) => goal.pinned).length;
   const visibleCount = state.visibleGoalCounts[category.id] ?? 6;
   const visibleGoals = category.goals.slice(0, visibleCount);
+  const planGoalCount = countPlanGoals(state.plan);
+  const goalLimitReached =
+    category.goals.length >= MAX_GOALS_PER_CATEGORY || planGoalCount >= MAX_PLAN_GOALS;
 
   return (
     <section className="content-view category-view">
@@ -336,6 +344,8 @@ function CategoryView(props: MainViewsProps & { category: Category }) {
         <button
           className="primary-button"
           type="button"
+          disabled={goalLimitReached}
+          title={goalLimitReached ? "已达到当前计划的目标数量上限" : undefined}
           onClick={() =>
             dispatch({
               type: "goal-added",
@@ -389,6 +399,7 @@ function CategoryView(props: MainViewsProps & { category: Category }) {
               categories={state.plan.categories}
               dispatch={dispatch}
               createMetadata={createMetadata}
+              constraintSequence={state.constraintSequence}
               isFirst={index === 0}
               isLast={index === category.goals.length - 1}
             />

@@ -15,6 +15,8 @@ import {
   updateTaxProfile,
 } from "./commands";
 import { validatePlanDocument } from "./validation";
+import { MAX_MONTHLY_GOAL_AMOUNT_CENTS, MAX_PLAN_CATEGORIES } from "./limits";
+import { PlanConstraintError } from "./validation";
 
 const DEVICE_ID = "30000000-0000-4000-8000-000000000001";
 const metadata = {
@@ -92,5 +94,48 @@ describe("plan commands", () => {
     });
     expect(themed.preferences.themeId).toBe("violet-blue");
     expect(validatePlanDocument(themed).ok).toBe(true);
+  });
+
+  it("rejects a command that would create an out-of-contract plan", () => {
+    const initial = createSamplePlan(DEVICE_ID);
+    const category = initial.categories[0];
+    const goal = category.goals[0];
+
+    expect(() =>
+      updateGoal(
+        initial,
+        category.id,
+        goal.id,
+        { monthlyAmountCents: MAX_MONTHLY_GOAL_AMOUNT_CENTS + 1 },
+        metadata,
+      ),
+    ).toThrow(PlanConstraintError);
+    expect(goal.monthlyAmountCents).not.toBe(MAX_MONTHLY_GOAL_AMOUNT_CENTS + 1);
+  });
+
+  it("rejects adding a category after the plan reaches its category limit", () => {
+    const initial = createSamplePlan(DEVICE_ID);
+    const full = {
+      ...initial,
+      categories: Array.from({ length: MAX_PLAN_CATEGORIES }, (_, index) => ({
+        ...initial.categories[0],
+        id: `43000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        name: `分类 ${index}`,
+        order: index,
+        goals: [],
+      })),
+    };
+
+    expect(() =>
+      addCategory(
+        full,
+        {
+          id: "43000000-0000-4000-8000-999999999999",
+          name: "超限分类",
+          icon: "＋",
+        },
+        metadata,
+      ),
+    ).toThrow(PlanConstraintError);
   });
 });

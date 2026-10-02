@@ -223,8 +223,7 @@ export class LocalPlanRepository implements LocalPlanSyncRepository {
   }
 
   async save(accountId: string, plan: PlanDocument, expectedRevision: number): Promise<SaveResult> {
-    parsePlanDocument(plan);
-    const savedPlan = { ...plan, revision: expectedRevision + 1 };
+    const savedPlan = parsePlanDocument({ ...plan, revision: expectedRevision + 1 });
     const database = await this.openDatabase();
     try {
       const transaction = database.transaction(PLAN_STORE, "readwrite");

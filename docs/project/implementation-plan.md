@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成           | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成           | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成           | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 7.1 进行中 | S1–S5 已完成；下一项为 S6 计划容量与金额范围契约，Phase 8 继续阻断。                        |
+| 产品实现     | Phase 7.1 进行中 | S1–S7 已完成；下一项为 S8 权威跨阶段门禁与最终复核，Phase 8 继续阻断。                      |
 | 部署         | 未开始           | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -195,7 +195,7 @@ React PWA
 
 ## Phase 7.1 — 修复跨阶段集成问题
 
-状态：进行中。S1–S5 已于 2026-10-02 完成并通过完整门禁；下一项为 S6。Phase 8 在本阶段全部退出条件满足前保持阻断。
+状态：进行中。S1–S7 已于 2026-10-02 完成并通过完整门禁；下一项为 S8。Phase 8 在本阶段全部退出条件满足前保持阻断。
 
 ### 执行协议
 
@@ -212,9 +212,9 @@ React PWA
 - [x] **S3 — 分离本地持久化与云端 debounce（高优先级）**：每次本地修改立即通过 S2 的原子计划/同步记录进入 IndexedDB，仅延迟/合并远端 `flush()`；覆盖编辑后 250ms 内关闭、页面卸载、PWA 更新和会话切换。
 - [x] **S4 — 加固认证恢复与退出登录（高优先级）**：首次认证状态确定前不开放可编辑匿名会话；退出前处理 local-change、syncing、offline、error 和 conflict，提供等待同步、导出或明确放弃修改的安全路径；不能把 S3 的 UI `saved`（仅表示已保存到本机）当作云端完成，必须同时检查账户级 pending/sync 状态；使用 S2 的原子账户清理，但必须验证 sign-out 失败不会先清除可恢复数据。
 - [x] **S5 — 修正字体离线就绪与缓存升级（高优先级）**：区分应用外壳可离线和全部七主题字体已缓存；warmup 失败可重试；缓存和资产清单由内容版本驱动并清理旧版本。覆盖 warmup 完成前断网、失败重试及字体版本升级。
-- [ ] **S6 — 建立计划容量与金额范围契约（高优先级）**：为分类/目标数量、UTF-8 序列化大小、单项与聚合金额设置 Domain、导入、UI 和 Repository 一致的边界；在 Firestore 1 MiB 和税务求解上限前给出可恢复提示，不允许渲染期 `RangeError` 崩溃。
-- [ ] **S7 — 对齐 Firestore Rules 与加载错误语义（中优先级）**：收紧可由 Rules 表达的嵌套字段、枚举和数量约束；明确区分云端不存在、暂时不可用和数据损坏；adapter 解析失败必须进入受控错误状态。增加恶意嵌套数据和远端暂时失败测试。
-- [ ] **S8 — 扩充跨阶段权威门禁并最终复核（收口）**：把 S1–S7 的真实 Repository、Firebase Emulator、双浏览器、PWA/字体升级和异常注入场景纳入 `npm run verify`，并保留 S3 的 StrictMode 生命周期重放、旧 flush/新编辑交叠、PWA 更新卸载和账户切换回归；重新审阅 Phase 1–7 的退出条件和发布验收清单，并确认没有遗留跨阶段冲突。
+- [x] **S6 — 建立计划容量与金额范围契约（高优先级）**：为分类/目标数量、UTF-8 序列化大小、单项与聚合金额设置 Domain、导入、UI 和 Repository 一致的边界；在 Firestore 1 MiB 和税务求解上限前给出可恢复提示，不允许渲染期 `RangeError` 崩溃。
+- [x] **S7 — 对齐 Firestore Rules 与加载错误语义（中优先级）**：收紧可由 Rules 表达的嵌套字段、枚举和数量约束，包括 S6 已固定的分类/目标数量与金额边界；明确区分云端不存在、暂时不可用和数据损坏，来自云端的 S6 超限文档应归入数据损坏而非暂时失败；adapter 的首次读取和订阅解析失败都必须进入受控错误状态。增加恶意嵌套/超限数据、首次读取失败和订阅期间暂时失败测试。
+- [ ] **S8 — 扩充跨阶段权威门禁并最终复核（收口）**：把 S1–S7 的真实 Repository、Firebase Emulator、双浏览器、PWA/字体升级和异常注入场景纳入 `npm run verify`，并保留 S3 的 StrictMode 生命周期重放、旧 flush/新编辑交叠、PWA 更新卸载和账户切换回归，以及 S6 的精确容量边界、超限 UI 回退、安全退出导出和 adapter 拒绝回归；新增 S7 首次读取失败/重试、有缓存降级、订阅错误和 Rules 绕过后的深层损坏 fail-closed 浏览器/集成回归；重新判定预发布 schema v1 超限数据的兼容策略与 revision 位数增长时的可持续编辑/UI 回退。重新审阅 Phase 1–7 的退出条件和发布验收清单，并确认没有遗留跨阶段冲突。
 
 退出条件：
 
@@ -257,7 +257,7 @@ React PWA
 - [x] Firestore Rules 阻止跨用户访问。
 - [x] 税务数据年份和限制清晰可见。
 - [x] 不需要或启用任何付费服务。
-- [ ] 计划容量和金额边界在 Firestore/税务引擎失败前得到受控处理。
+- [x] 计划容量和金额边界在 Firestore/税务引擎失败前得到受控处理。
 - [ ] 测试、构建和人工视觉验收全部通过。
 
 ## 计划提交顺序
@@ -275,6 +275,36 @@ React PWA
 11. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-02 — 完成 Phase 7.1 S7 Firestore Rules 与云端加载错误语义修复
+
+- 在 Firebase 无关的 `RemotePlanRepository` port 新增 `RemotePlanReadError`，明确区分 `unavailable` 与 `corrupt`，同时继续用 `null` 唯一表示远端文档不存在。Firebase adapter 把 SDK 读取/订阅失败映射为暂时不可用，把 tombstone、迁移、结构、枚举、未知字段及 S6 容量/金额校验失败映射为损坏数据；订阅成功回调内的解析失败不再形成未处理异常。
+- `SyncedPlanRepository` 在有有效本地缓存时保留本机计划并发布带错误类别的同步状态；没有本地计划时向上抛出 typed error，不再误开“云端为空”的导入/新建流程。异步订阅应用失败也统一收口为受控同步错误。应用准备门禁针对暂时不可用和损坏显示不同标题，阻断编辑并提供重新读取或安全退出；本地缓存可用时继续允许离线优先编辑，同时账户面板显示云端错误。
+- Domain 对 plan、tax profile、preferences、category 与 goal 全部执行严格字段白名单，并只接受当前 `us-ca-w2-2026-v1` 规则集。Firestore Rules 同步收紧 tax/profile 字段、枚举、字符串边界、`$500,000` 税前扣除、7 个主题及最多 50 个分类，同时保留 owner、严格递增 revision 与 tombstone；Rules 无法遍历的任意长度 goal 数组仍由 Domain/Firebase adapter fail closed。
+- 新增首次加载暂时不可用、有效本地回退、订阅暂时失败、云端超限读取损坏、订阅解析损坏、未知嵌套字段、Rules 恶意 profile/preferences、50/51 分类边界和税前扣除边界回归。完整 `npm run verify` 通过 19 个测试文件共 113 项单元/组件测试、生产构建、PWA/七主题字体/320–2000px 浏览器检查、8 项 Firebase Emulator 测试与真实双浏览器同步；未连接生产 Firebase 或部署。
+- 基于 S7 后最新仓库复核 S8：顺序和收口优先级不变。S8 需把 S7 的首次读取失败/重试、本地缓存降级、订阅错误、深层损坏 fail-closed 纳入权威集成/浏览器门禁，并重新判定预发布 schema v1 超限数据兼容策略与精确 256 KiB 计划跨 revision 位数时的可持续编辑/UI 回退。Phase 8 继续阻断。
+
+### 2026-10-02 — 启动 Phase 7.1 S7 Firestore Rules 与云端加载错误语义修复
+
+- 基于 S6 后的最新代码复核确认：`RemotePlanRepository.load()` 目前用 `null` 表示不存在，但 `SyncedPlanRepository.load()` 会把所有远端读取异常吞并为本地回退；当本机没有缓存时，暂时不可用或损坏数据会被错误地当成“云端没有计划”。实时订阅成功回调里的解析异常和异步本地应用异常也尚未进入受控错误状态。
+- S7 将在 Firebase 无关的 port 层定义 `unavailable / corrupt` typed read error。Firebase adapter 负责把 SDK 读取失败映射为暂时不可用，把迁移、结构、枚举、S6 容量/金额校验失败映射为损坏；同步 Repository 在存在有效本地缓存时保留本机计划并报告错误，在没有缓存时向上抛出 typed error，应用准备门禁提供明确提示和重试，绝不把错误降级为 `null`。
+- Firestore Rules 将严格校验顶层、`taxProfile`、`preferences`、枚举、税前扣除边界和最多 50 个分类，并保留 owner、单调 revision 与 tombstone 约束。Firestore Rules 无法遍历任意长度的嵌套 category/goal 数组，因此每分类 200 项、全计划 500 项、goal 字段/金额及总金额仍由 Domain 与 Firebase adapter fail closed；Emulator 测试会明确覆盖 Rules 能表达的恶意结构，并通过绕过 Rules 注入验证 adapter 将深层损坏归类为 `corrupt`。
+- 上线前尚无生产 Firebase 数据，因此 S6 新上限对历史 schema v1 数据的兼容风险不阻断本轮；S8 最终复核必须重新检查该迁移/恢复策略，以及精确 256 KiB 计划在 revision 位数增长时的可持续编辑与 UI 回退，不能把 Repository 拒绝误当成完整用户恢复路径。本轮不实现 S8、不连接生产 Firebase、不提交、不推送。
+
+### 2026-10-02 — 完成 Phase 7.1 S6 计划容量与金额范围修复
+
+- 新增统一 Domain 契约：最多 50 个分类、每分类 200 个目标、全计划 500 个目标、canonical JSON 256 KiB、单目标和每月税前扣除 `$500,000`、全部目标每月合计 `$1,000,000`。边界值有效，超过即由 `PlanConstraintError` fail closed；该变更不改变持久字段，`schemaVersion` 保持为 1。
+- 所有 Domain 命令在返回候选状态前执行同一校验；JSON 导入会在解析前检查 UTF-8 文件大小，导出改为重新验证后的 compact canonical JSON。本地 Repository、同步 Repository 和 Firebase adapter 保留独立的同契约校验，绕过 UI 的非法写入也不能进入 IndexedDB 或 Firestore。
+- UI 在数量上限禁用新增/移动入口，并为目标金额和税前扣除设置显式最大值。超限编辑由 reducer 捕获，保留上一份有效计划、重挂载非受控输入并显示可关闭提示，收入面板不会收到超出求解域的状态；安全退出中的 JSON 导出也会显示可恢复错误而不是中断交互。
+- 完整 `npm run verify` 通过：19 个测试文件、107 项单元/组件测试、生产构建与预算、PWA 两轮离线重开、七主题/582 个 WOFF2、320–2000px 质量与可访问性、`$500,000` 有效边界与 `$500,001` 浏览器回退、revision 位数增长后的最终文档复核、Firebase Emulator 和双浏览器同步均通过。
+- 基于 S6 后最新仓库复核 S7–S8：顺序和优先级不变。S7 需把可表达的 S6 分类/目标数量与金额限制镜像到 Rules，并将首次读取或订阅收到的超限计划明确归为云端数据损坏，不能与不存在或暂时不可用混淆；这补充了 S7 验收范围。S8 必须保留 S6 的精确边界、超限导入、Repository/Firebase 拒绝、UI 值回退、安全退出导出和真实 Chrome 无 `pageerror` 回归。Phase 8 继续阻断。
+
+### 2026-10-02 — 启动 Phase 7.1 S6 计划容量与金额范围修复
+
+- S5 已以 commit `0b97dbd` 推送到 `origin/main`，提交前完整 `npm run verify` 通过，本地与远端 `main` SHA 一致，工作区以干净状态进入 S6。
+- 最新链路复核确认现有校验只有名称长度、非负安全整数和基础枚举，没有分类数、单分类/总目标数、序列化字节、单项目金额、聚合金额或每月税前扣除上限；Domain 可接受约 2.48 MB 的 5,000 项计划，UI 数字输入也能把超范围目标直接送入渲染期税务求解并触发 `RangeError`。
+- S6 将建立单一 Domain 契约：最多 50 个分类、每分类 200 个目标、全计划 500 个目标、canonical JSON 最多 256 KiB、单项目与每月税前扣除最多 `$500,000`、全部目标每月合计最多 `$1,000,000`。该范围覆盖既定 50 项和 `$500,000` 极端夹具，并为 Firestore 1 MiB 与求解器 `$100,000,000` 年薪上限保留明确余量。
+- Domain 校验、命令、JSON 导入/导出、UI 添加与金额输入、本地 Repository、同步 Repository 和 Firebase adapter 将共享该契约。预期超限必须保留上一份有效计划并显示可恢复提示；测试覆盖边界值、超限导入、Repository 拒绝、聚合金额、渲染不抛错，以及安全退出中的 JSON 导出。本轮不修改 Rules 可表达的深层结构或云端加载错误分类，这些仍由 S7 处理。
 
 ### 2026-10-02 — 完成 Phase 7.1 S5 字体离线就绪与缓存升级修复
 
@@ -498,7 +528,7 @@ Last updated: 2026-10-02
 | Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
 | Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
 | Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 7.1 active | S1–S5 are complete; S6 plan-capacity and money-range contracts are next, and Phase 8 remains blocked.          |
+| Product implementation | Phase 7.1 active | S1–S7 are complete; S8 authoritative cross-phase coverage and final re-audit are next, and Phase 8 is blocked. |
 | Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
 
 ## Architecture baseline
@@ -681,7 +711,7 @@ Exit criteria:
 
 ## Phase 7.1 — Resolve cross-phase integration gaps
 
-Status: In progress. S1–S5 passed the complete gate on 2026-10-02, and S6 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
+Status: In progress. S1–S7 passed the complete gate on 2026-10-02, and S8 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
 
 ### Execution protocol
 
@@ -698,9 +728,9 @@ Status: In progress. S1–S5 passed the complete gate on 2026-10-02, and S6 is n
 - [x] **S3 — Separate local persistence from cloud debounce (high)**: persist every local edit immediately through S2's atomic plan/sync record and delay/coalesce only remote `flush()` calls. Cover closing within 250ms, page unmount, PWA update, and session switching.
 - [x] **S4 — Harden auth restoration and sign-out (high)**: do not expose an editable anonymous session before the first auth state resolves; handle local-change, syncing, offline, error, and conflict before sign-out with safe wait, export, or explicit-discard paths; do not treat S3's UI `saved` state (local persistence only) as cloud completion, and inspect account-level pending/sync state as well; use S2's atomic account cleanup, but prove sign-out failure cannot clear recoverable data first.
 - [x] **S5 — Correct font offline readiness and cache upgrades (high)**: distinguish shell readiness from complete seven-theme font caching; retry failed warmup; version caches and manifests by content and remove obsolete versions. Cover going offline before warmup completes, retry after failure, and font-version upgrades.
-- [ ] **S6 — Establish plan-capacity and money-range contracts (high)**: align Domain, import, UI, and Repository limits for category/goal counts, UTF-8 serialized bytes, individual values, and aggregates. Surface recoverable messages before Firestore's 1 MiB limit or the tax solver ceiling; rendering must not crash with `RangeError`.
-- [ ] **S7 — Align Firestore Rules and cloud-load error semantics (medium)**: tighten nested fields, enums, and count limits that Rules can express; distinguish missing, temporarily unavailable, and corrupt cloud data; route adapter parse failures into a controlled error state. Add malformed nested-data and transient-load tests.
-- [ ] **S8 — Expand the authoritative cross-phase gate and re-audit (closeout)**: add S1–S7 scenarios to real Repository, Firebase Emulator, two-browser, PWA/font-upgrade, and failure-injection coverage under `npm run verify`, retaining S3's StrictMode replay, older-flush/newer-edit overlap, PWA-update unmount, and account-switch regressions; re-review every Phase 1–7 exit criterion and the release checklist, with no unresolved cross-phase conflict.
+- [x] **S6 — Establish plan-capacity and money-range contracts (high)**: align Domain, import, UI, and Repository limits for category/goal counts, UTF-8 serialized bytes, individual values, and aggregates. Surface recoverable messages before Firestore's 1 MiB limit or the tax solver ceiling; rendering must not crash with `RangeError`.
+- [x] **S7 — Align Firestore Rules and cloud-load error semantics (medium)**: tighten nested fields, enums, and count limits that Rules can express, including S6's fixed category/goal counts and money boundaries; distinguish missing, temporarily unavailable, and corrupt cloud data, treating an S6-limit violation received from the cloud as corrupt data rather than a transient failure; route both initial-load and subscription parse failures into a controlled error state. Add malformed nested/over-limit data, initial-load failure, and subscription-time transient-failure tests.
+- [ ] **S8 — Expand the authoritative cross-phase gate and re-audit (closeout)**: add S1–S7 scenarios to real Repository, Firebase Emulator, two-browser, PWA/font-upgrade, and failure-injection coverage under `npm run verify`, retaining S3's StrictMode replay, older-flush/newer-edit overlap, PWA-update unmount, and account-switch regressions plus S6's exact capacity boundaries, over-limit UI rollback, safe-sign-out export, and adapter rejection regressions; add S7 browser/integration regressions for initial-load failure/retry, cached fallback, subscription errors, and deep corrupt-data fail-closed behavior after a Rules bypass; re-decide compatibility for pre-release over-limit schema-v1 data and sustainable edit/UI rollback when an exact 256 KiB plan crosses a revision digit boundary. Re-review every Phase 1–7 exit criterion and the release checklist, with no unresolved cross-phase conflict.
 
 Exit criteria:
 
@@ -743,7 +773,7 @@ Exit criteria:
 - [x] Firestore rules prevent cross-user access.
 - [x] Tax source years and limitations are visible.
 - [x] No paid service is required or enabled.
-- [ ] Plan-capacity and money limits are handled before Firestore or the tax engine fails.
+- [x] Plan-capacity and money limits are handled before Firestore or the tax engine fails.
 - [ ] Tests, build, and manual visual acceptance pass.
 
 ## Planned commit sequence
@@ -761,6 +791,36 @@ Exit criteria:
 11. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-02 — Phase 7.1 S7 Firestore Rules and cloud-load error semantics repair completed
+
+- Added `RemotePlanReadError` to the Firebase-independent `RemotePlanRepository` port, explicitly separating `unavailable` from `corrupt` while reserving `null` only for a missing remote document. The Firebase adapter maps SDK load/subscription failures to unavailable and tombstone, migration, shape, enum, unknown-field, or S6 capacity/money failures to corrupt; parse failures inside successful subscription callbacks no longer become unhandled exceptions.
+- `SyncedPlanRepository` preserves a valid local plan and publishes a categorized sync error when a cache exists, but rethrows the typed error when no local plan exists instead of entering the cloud-empty import/create path. Asynchronous subscription-application failures also enter a controlled sync error. The application preparation gate distinguishes temporary unavailability from corruption, blocks editing, and offers retry or safe sign-out; a valid local cache remains usable under the local-first model while the account panel reports the cloud error.
+- Domain now applies strict field allowlists to the plan, tax profile, preferences, categories, and goals and accepts only the current `us-ca-w2-2026-v1` rule set. Firestore Rules now validate tax/profile fields, enums, string boundaries, the `$500,000` pretax limit, all seven themes, and at most 50 categories while retaining owner, strictly increasing revision, and tombstone checks. Arbitrary-length goal arrays remain impossible to iterate in Rules and therefore stay fail-closed in Domain and the Firebase adapter.
+- Added regressions for unavailable initial load, valid-local fallback, transient subscription failure, over-limit cloud-load corruption, subscription parse corruption, unknown nested fields, malicious Rules profile/preferences, the 50/51 category boundary, and the pretax boundary. Complete `npm run verify` passed 113 unit/component tests across 19 files, the production build, PWA/seven-theme font/320–2000px browser checks, eight Firebase Emulator tests, and real two-browser synchronization. Production Firebase was not connected and nothing was deployed.
+- Re-audited S8 against the post-S7 repository. Its order and closeout priority are unchanged. S8 must add S7's initial-load failure/retry, cached fallback, subscription error, and deep corrupt-data fail-closed scenarios to the authoritative integration/browser gate, and re-decide compatibility for pre-release over-limit schema-v1 data plus sustainable edit/UI rollback when an exact 256 KiB plan crosses a revision digit boundary. Phase 8 remains blocked.
+
+### 2026-10-02 — Phase 7.1 S7 Firestore Rules and cloud-load error semantics repair started
+
+- The post-S6 code review confirms that `RemotePlanRepository.load()` already reserves `null` for a missing document, but `SyncedPlanRepository.load()` currently swallows every remote read failure into a local fallback. With no valid local cache, temporary unavailability or corrupt data is therefore misreported as “no cloud plan.” Parse failures inside successful subscription callbacks and asynchronous local-application failures also do not reach a controlled error state.
+- S7 will define Firebase-independent typed `unavailable / corrupt` read errors at the port boundary. The Firebase adapter will map SDK read failures to unavailable and migration, shape, enum, S6 capacity, or money validation failures to corrupt. The synchronized Repository will preserve a valid local plan while reporting the error, but will rethrow the typed error when no local plan exists; the application preparation gate will show a specific message and a retry path instead of degrading the failure to `null`.
+- Firestore Rules will strictly validate the top level, `taxProfile`, `preferences`, enums, the pretax-deduction boundary, and at most 50 categories while retaining owner, monotonic-revision, and tombstone rules. Firestore Rules cannot iterate arbitrary category/goal arrays, so the 200-goals-per-category, 500-goals-per-plan, goal field/money, and aggregate limits remain fail-closed in Domain and the Firebase adapter. Emulator coverage will exercise every Rules-expressible malicious shape and inject deep invalid data with Rules bypassed to prove the adapter classifies it as `corrupt`.
+- Production Firebase has not been enabled, so compatibility with pre-limit schema-v1 cloud data does not block this unit. S8's final audit must still revisit a migration/recovery strategy and the sustainable-edit/UI-rollback behavior when an exact 256 KiB plan crosses a revision digit boundary; Repository rejection alone is not a complete recovery path. This unit does not implement S8, connect production Firebase, commit, or push.
+
+### 2026-10-02 — Phase 7.1 S6 plan-capacity and money-range repair completed
+
+- Added one Domain contract: at most 50 categories, 200 goals per category, 500 goals per plan, 256 KiB of canonical JSON, `$500,000` per goal and monthly pretax deduction, and `$1,000,000` in aggregate monthly goals. Exact boundaries are valid and excess is rejected fail closed through `PlanConstraintError`. Persistent fields did not change, so `schemaVersion` remains 1.
+- Every Domain command validates its candidate before returning it. JSON import checks UTF-8 source size before parsing, while export emits revalidated compact canonical JSON. Local Repository, synchronized Repository, and Firebase adapter boundaries independently enforce the same contract, preventing UI-bypassing writes from reaching IndexedDB or Firestore.
+- The UI disables add/move entry points at count limits and declares explicit maxima for goal and pretax inputs. The reducer catches expected limit failures, retains the last valid plan, remounts uncontrolled inputs, and shows a dismissible message so the income panel never receives out-of-solver-range state. JSON export during safe sign-out also reports a recoverable failure instead of breaking the interaction.
+- The complete `npm run verify` passed: 19 test files, 107 unit/component tests, production build and budgets, two PWA offline reopen cycles, all seven themes and 582 WOFF2 assets, 320–2000px quality/accessibility coverage, the valid `$500,000` boundary plus `$500,001` browser rollback, final-document validation across a revision digit increase, Firebase Emulator, and real two-browser synchronization.
+- Re-audited S7–S8 against the post-S6 repository; ordering and priority remain unchanged. S7 must mirror S6's Rules-expressible category/goal count and money limits and classify an over-limit plan received during initial load or subscription as corrupt cloud data rather than missing or transient. S8 must retain S6's exact-boundary, oversized-import, Repository/Firebase rejection, UI rollback, safe-sign-out export, and real-Chrome no-`pageerror` regressions. Phase 8 remains blocked.
+
+### 2026-10-02 — Phase 7.1 S6 plan-capacity and money-range repair started
+
+- S5 was pushed to `origin/main` as commit `0b97dbd`. The complete pre-commit `npm run verify` gate passed, local and remote `main` SHAs match, and S6 starts from a clean working tree.
+- The latest path audit confirms that validation currently covers only name length, non-negative safe integers, and basic enums. It has no category count, per-category/total goal count, serialized-byte, per-goal amount, aggregate amount, or monthly pretax-deduction ceiling. Domain accepts a roughly 2.48 MB plan with 5,000 goals, and UI number input can feed an unsupported target directly into render-time tax solving and throw `RangeError`.
+- S6 will establish one Domain contract: at most 50 categories, 200 goals per category, 500 goals per plan, 256 KiB of canonical JSON, `$500,000` per goal and monthly pretax deduction, and `$1,000,000` total monthly goals. This retains the accepted 50-goal and `$500,000` extreme fixtures while leaving explicit headroom below Firestore's 1 MiB document cap and the solver's `$100,000,000` annual-gross ceiling.
+- Domain validation, commands, JSON import/export, UI add and money inputs, local Repository, synchronized Repository, and the Firebase adapter will share the contract. Expected limit violations must retain the last valid plan and show a recoverable message. Tests will cover exact boundaries, oversized import, Repository rejection, aggregate money, crash-free rendering, and JSON export during safe sign-out. Deep Rules-expressible shape validation and cloud-load error classification remain S7 scope.
 
 ### 2026-10-02 — Phase 7.1 S5 font-offline-readiness and cache-upgrade repair completed
 

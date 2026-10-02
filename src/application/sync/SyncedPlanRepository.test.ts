@@ -2,14 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MemoryPlanRepository } from "../../adapters/local/MemoryPlanRepository";
 import { createSamplePlan } from "../samplePlan";
-import type { PlanDocument } from "../../domain/plan";
+import {
+  MAX_MONTHLY_GOAL_AMOUNT_CENTS,
+  PlanConstraintError,
+  type PlanDocument,
+} from "../../domain/plan";
 import type {
   RemotePlanRepository,
   RemotePlanSnapshot,
   RemotePlanTombstone,
   RemoteSaveResult,
 } from "../../ports/RemotePlanRepository";
-import { SyncedPlanRepository } from "./SyncedPlanRepository";
+import { RemotePlanReadError } from "../../ports/RemotePlanRepository";
+import { SyncedPlanRepository, type CloudSyncSnapshot } from "./SyncedPlanRepository";
 
 const ACCOUNT_ID = "account-one";
 const DEVICE_A = "30000000-0000-4000-8000-000000000001";
@@ -17,8 +22,15 @@ const DEVICE_B = "30000000-0000-4000-8000-000000000002";
 
 class MemoryRemotePlanRepository implements RemotePlanRepository {
   private readonly snapshots = new Map<string, RemotePlanSnapshot>();
-  private readonly listeners = new Map<string, Set<(snapshot: RemotePlanSnapshot) => void>>();
+  private readonly listeners = new Map<
+    string,
+    Set<{
+      onRemoteChange: (snapshot: RemotePlanSnapshot) => void;
+      onError: (error: RemotePlanReadError) => void;
+    }>
+  >();
   private nextPushGate: { markStarted: () => void; waitForRelease: Promise<void> } | null = null;
+  loadError: Error | null = null;
 
   deferNextPush() {
     let markStarted: () => void = () => undefined;
@@ -34,6 +46,7 @@ class MemoryRemotePlanRepository implements RemotePlanRepository {
   }
 
   async load(accountId: string): Promise<RemotePlanSnapshot | null> {
+    if (this.loadError) throw this.loadError;
     return this.snapshots.get(accountId) ?? null;
   }
 
@@ -55,15 +68,24 @@ class MemoryRemotePlanRepository implements RemotePlanRepository {
     }
     const snapshot = { kind: "plan", plan } as const;
     this.snapshots.set(accountId, snapshot);
-    this.listeners.get(accountId)?.forEach((listener) => listener(snapshot));
+    this.listeners.get(accountId)?.forEach(({ onRemoteChange }) => onRemoteChange(snapshot));
     return { status: "saved", revision: plan.revision };
   }
 
-  subscribe(accountId: string, onRemoteChange: (snapshot: RemotePlanSnapshot) => void): () => void {
+  subscribe(
+    accountId: string,
+    onRemoteChange: (snapshot: RemotePlanSnapshot) => void,
+    onError: (error: RemotePlanReadError) => void,
+  ): () => void {
     const listeners = this.listeners.get(accountId) ?? new Set();
-    listeners.add(onRemoteChange);
+    const listener = { onRemoteChange, onError };
+    listeners.add(listener);
     this.listeners.set(accountId, listeners);
-    return () => listeners.delete(onRemoteChange);
+    return () => listeners.delete(listener);
+  }
+
+  emitReadError(accountId: string, error: RemotePlanReadError) {
+    this.listeners.get(accountId)?.forEach(({ onError }) => onError(error));
   }
 
   async delete(accountId: string, requested: RemotePlanTombstone) {
@@ -73,7 +95,7 @@ class MemoryRemotePlanRepository implements RemotePlanRepository {
       tombstone: { ...requested, revision },
     } as const;
     this.snapshots.set(accountId, snapshot);
-    this.listeners.get(accountId)?.forEach((listener) => listener(snapshot));
+    this.listeners.get(accountId)?.forEach(({ onRemoteChange }) => onRemoteChange(snapshot));
     return { revision };
   }
 
@@ -84,6 +106,80 @@ class MemoryRemotePlanRepository implements RemotePlanRepository {
 }
 
 describe("SyncedPlanRepository", () => {
+  it("does not turn an unavailable cloud document into a missing plan without local data", async () => {
+    const remote = new MemoryRemotePlanRepository();
+    remote.loadError = new RemotePlanReadError("unavailable", "Cloud temporarily unavailable.");
+    const repository = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => true);
+    const snapshots: CloudSyncSnapshot[] = [];
+    repository.subscribeSync((snapshot) => snapshots.push(snapshot));
+
+    await expect(repository.load(ACCOUNT_ID)).rejects.toMatchObject({
+      name: "RemotePlanReadError",
+      kind: "unavailable",
+    });
+    expect(snapshots.at(-1)).toEqual({
+      status: "error",
+      error: "Cloud temporarily unavailable.",
+      errorKind: "unavailable",
+    });
+  });
+
+  it("keeps a valid local plan while surfacing a corrupt cloud document", async () => {
+    const local = new MemoryPlanRepository();
+    const localPlan = { ...createSamplePlan(DEVICE_A), revision: 1 };
+    await local.replace(ACCOUNT_ID, localPlan);
+    const remote = new MemoryRemotePlanRepository();
+    remote.loadError = new RemotePlanReadError("corrupt", "Cloud plan is corrupt.");
+    const repository = new SyncedPlanRepository(local, remote, () => true);
+    const snapshots: CloudSyncSnapshot[] = [];
+    repository.subscribeSync((snapshot) => snapshots.push(snapshot));
+
+    await expect(repository.load(ACCOUNT_ID)).resolves.toEqual(localPlan);
+    expect(snapshots.at(-1)).toEqual({
+      status: "error",
+      error: "Cloud plan is corrupt.",
+      errorKind: "corrupt",
+    });
+    await expect(local.load(ACCOUNT_ID)).resolves.toEqual(localPlan);
+  });
+
+  it("routes subscription read failures into the controlled sync state", async () => {
+    const remote = new MemoryRemotePlanRepository();
+    const repository = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => true);
+    const snapshots: CloudSyncSnapshot[] = [];
+    repository.subscribeSync((snapshot) => snapshots.push(snapshot));
+    repository.subscribe(ACCOUNT_ID, vi.fn());
+
+    remote.emitReadError(
+      ACCOUNT_ID,
+      new RemotePlanReadError("unavailable", "Subscription temporarily unavailable."),
+    );
+
+    expect(snapshots.at(-1)).toEqual({
+      status: "error",
+      error: "Subscription temporarily unavailable.",
+      errorKind: "unavailable",
+    });
+  });
+
+  it("rejects an out-of-contract plan before it becomes pending or reaches the cloud", async () => {
+    const remote = new MemoryRemotePlanRepository();
+    const push = vi.spyOn(remote, "push");
+    const local = new MemoryPlanRepository();
+    const repository = new SyncedPlanRepository(local, remote, () => true);
+    const invalid = createSamplePlan(DEVICE_A);
+    invalid.categories[0].goals[0].monthlyAmountCents = MAX_MONTHLY_GOAL_AMOUNT_CENTS + 1;
+
+    await expect(repository.save(ACCOUNT_ID, invalid, 0)).rejects.toBeInstanceOf(
+      PlanConstraintError,
+    );
+    await expect(local.loadPlanSync(ACCOUNT_ID)).resolves.toMatchObject({
+      plan: null,
+      syncState: null,
+    });
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("keeps only the latest offline plan and pushes it after reconnection", async () => {
     let online = false;
     const remote = new MemoryRemotePlanRepository();

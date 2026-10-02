@@ -106,14 +106,19 @@ export function AccountControl({
     account !== null && (saveStatus !== "saved" || sync?.status !== "synced");
 
   const exportPlan = () => {
-    const blob = new Blob([exportPlanJson(plan)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `worthwhile-plan-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setDataMessage("计划 JSON 已导出。文件仅保存在这台设备上。");
+    setDataMessage(null);
+    try {
+      const blob = new Blob([exportPlanJson(plan)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `worthwhile-plan-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setDataMessage("计划 JSON 已导出。文件仅保存在这台设备上。");
+    } catch (error: unknown) {
+      setDataMessage(error instanceof Error ? error.message : "无法导出当前计划。");
+    }
   };
 
   const importPlan = async (event: ChangeEvent<HTMLInputElement>) => {

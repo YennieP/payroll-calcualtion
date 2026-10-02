@@ -9,13 +9,14 @@ import {
   SyncedPlanRepository,
   type CloudSyncSnapshot,
 } from "../application/sync/SyncedPlanRepository";
-import type { PlanDocument } from "../domain/plan";
+import { parsePlanDocument, type PlanDocument } from "../domain/plan";
 import { AccountControl, type SignOutStrategy } from "../features/auth/AccountControl";
 import { Planner } from "../features/planner/Planner";
 import type { Account, AuthProvider } from "../ports/AuthProvider";
 import type { CloudRuntime } from "../ports/CloudRuntime";
 import type { LocalPlanSyncRepository } from "../ports/LocalPlanSyncRepository";
 import type { PlanRepository } from "../ports/PlanRepository";
+import { RemotePlanReadError, type RemotePlanReadErrorKind } from "../ports/RemotePlanRepository";
 import { appReducer, createInitialAppState } from "./appReducer";
 import { loadFirebaseRuntime } from "./firebaseBootstrap";
 
@@ -46,6 +47,7 @@ interface CloudPreparation {
   anonymousPlan: PlanDocument | null;
   preloadedPlan: PlanDocument | null;
   message: string | null;
+  errorKind: RemotePlanReadErrorKind | null;
 }
 
 interface AuthSession {
@@ -292,14 +294,15 @@ function PlannerSession({
 
   const importPlan = async (source: string) => {
     const imported = importPlanJson(source);
+    const prepared = parsePlanDocument({
+      ...imported,
+      revision: state.plan.revision,
+      updatedAt: new Date().toISOString(),
+      updatedByDevice: deviceId,
+    });
     dispatch({
       type: "plan-imported",
-      plan: {
-        ...imported,
-        revision: state.plan.revision,
-        updatedAt: new Date().toISOString(),
-        updatedByDevice: deviceId,
-      },
+      plan: prepared,
     });
   };
 
@@ -367,6 +370,7 @@ function SessionGate({
   busy,
   onImport,
   onSkip,
+  onRetry,
   onDiscardAndSignOut,
 }: {
   account: Account;
@@ -374,13 +378,24 @@ function SessionGate({
   busy: boolean;
   onImport: () => Promise<void>;
   onSkip: () => void;
+  onRetry: () => void;
   onDiscardAndSignOut: () => Promise<void>;
 }) {
   return (
     <div className="planner-stage session-gate" data-theme="rouge">
       <section className="session-gate-card" role="dialog" aria-label="准备跨设备同步">
         <span>WORTHWHILE · CLOUD</span>
-        <h1>{preparation.status === "import-offer" ? "导入这台设备的计划？" : "正在准备同步"}</h1>
+        <h1>
+          {preparation.status === "import-offer"
+            ? "导入这台设备的计划？"
+            : preparation.status === "error" && preparation.errorKind === "corrupt"
+              ? "云端计划需要处理"
+              : preparation.status === "error" && preparation.errorKind === "unavailable"
+                ? "云端暂时无法读取"
+                : preparation.status === "error"
+                  ? "同步准备失败"
+                  : "正在准备同步"}
+        </h1>
         <p>
           {preparation.status === "import-offer"
             ? `账户 ${account.email ?? account.id} 的云端还没有计划。你可以把当前本机计划作为第一份云端版本。`
@@ -397,9 +412,14 @@ function SessionGate({
           </div>
         ) : null}
         {preparation.status === "error" ? (
-          <button type="button" disabled={busy} onClick={() => void onDiscardAndSignOut()}>
-            放弃此账户的本机缓存并退出
-          </button>
+          <div>
+            <button type="button" disabled={busy} onClick={onRetry}>
+              重新读取云端计划
+            </button>
+            <button type="button" disabled={busy} onClick={() => void onDiscardAndSignOut()}>
+              放弃此账户的本机缓存并退出
+            </button>
+          </div>
         ) : null}
       </section>
     </div>
@@ -474,6 +494,7 @@ export function App({
       : null,
   );
   const [preparationResult, setPreparationResult] = useState<CloudPreparation | null>(null);
+  const [preparationAttempt, setPreparationAttempt] = useState(0);
   const [gateBusy, setGateBusy] = useState(false);
   const [syncSession, setSyncSession] = useState<SyncSession | null>(null);
   const [cacheCleanup, setCacheCleanup] = useState<CacheCleanupState | null>(null);
@@ -545,6 +566,7 @@ export function App({
           anonymousPlan,
           preloadedPlan: accountPlan,
           message: null,
+          errorKind: null,
         });
       },
       (error: unknown) => {
@@ -555,13 +577,14 @@ export function App({
           anonymousPlan: null,
           preloadedPlan: null,
           message: error instanceof Error ? error.message : "无法准备同步。",
+          errorKind: error instanceof RemotePlanReadError ? error.kind : null,
         });
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [account, localRepository, syncedRepository]);
+  }, [account, localRepository, preparationAttempt, syncedRepository]);
 
   const preparation: CloudPreparation | null = account
     ? preparationResult?.accountId === account.id
@@ -572,6 +595,7 @@ export function App({
           anonymousPlan: null,
           preloadedPlan: null,
           message: null,
+          errorKind: null,
         }
     : null;
 
@@ -663,6 +687,10 @@ export function App({
             }
           }}
           onSkip={() => setPreparationResult({ ...preparation, status: "ready" })}
+          onRetry={() => {
+            setPreparationResult(null);
+            setPreparationAttempt((attempt) => attempt + 1);
+          }}
           onDiscardAndSignOut={signOut}
         />
       );

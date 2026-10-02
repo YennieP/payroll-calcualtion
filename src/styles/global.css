@@ -1002,7 +1002,8 @@ button:disabled {
 }
 
 .conflict-banner,
-.error-banner {
+.error-banner,
+.constraint-banner {
   position: relative;
   z-index: 15;
   display: flex;
@@ -1015,14 +1016,16 @@ button:disabled {
   font-size: 10px;
 }
 
-.conflict-banner > div {
+.conflict-banner > div,
+.constraint-banner > div {
   min-width: 0;
   display: grid;
   flex: 1;
   gap: 2px;
 }
 
-.conflict-banner button {
+.conflict-banner button,
+.constraint-banner button {
   padding: 6px 9px;
   border: 1px solid var(--top-line);
   border-radius: var(--radius);
@@ -1033,6 +1036,10 @@ button:disabled {
 .error-banner {
   justify-content: center;
   background: #8d1730;
+}
+
+.constraint-banner {
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent2));
 }
 
 .planner-layout {

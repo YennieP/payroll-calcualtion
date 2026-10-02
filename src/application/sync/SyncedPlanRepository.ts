@@ -3,9 +3,11 @@ import type { LocalPlanSyncRepository, PlanSyncState } from "../../ports/LocalPl
 import type { PlanChange, PlanRepository, SaveResult } from "../../ports/PlanRepository";
 import type {
   RemotePlanRepository,
+  RemotePlanReadErrorKind,
   RemotePlanSnapshot,
   RemotePlanTombstone,
 } from "../../ports/RemotePlanRepository";
+import { RemotePlanReadError } from "../../ports/RemotePlanRepository";
 
 export type CloudSyncStatus =
   "connecting" | "syncing" | "synced" | "offline" | "error" | "conflict";
@@ -13,6 +15,7 @@ export type CloudSyncStatus =
 export interface CloudSyncSnapshot {
   status: CloudSyncStatus;
   error: string | null;
+  errorKind: RemotePlanReadErrorKind | "operation" | null;
 }
 
 type SyncListener = (snapshot: CloudSyncSnapshot) => void;
@@ -40,12 +43,27 @@ export class SyncedPlanRepository implements PlanRepository {
     this.syncSnapshot = {
       status: isOnline() ? "connecting" : "offline",
       error: null,
+      errorKind: null,
     };
   }
 
-  private publish(status: CloudSyncStatus, error: string | null = null) {
-    this.syncSnapshot = { status, error };
+  private publish(
+    status: CloudSyncStatus,
+    error: string | null = null,
+    errorKind: CloudSyncSnapshot["errorKind"] = null,
+  ) {
+    this.syncSnapshot = { status, error, errorKind };
     this.syncListeners.forEach((listener) => listener(this.syncSnapshot));
+  }
+
+  private normalizeRemoteReadError(error: unknown): RemotePlanReadError {
+    return error instanceof RemotePlanReadError
+      ? error
+      : new RemotePlanReadError(
+          "unavailable",
+          error instanceof Error ? error.message : "Cloud load failed.",
+          { cause: error },
+        );
   }
 
   private normalizeState(accountId: string, state: PlanSyncState | null): PlanSyncState {
@@ -113,8 +131,10 @@ export class SyncedPlanRepository implements PlanRepository {
       this.publish("synced");
       return remotePlan;
     } catch (error: unknown) {
-      this.publish("error", error instanceof Error ? error.message : "Cloud load failed.");
-      return localPlan;
+      const remoteError = this.normalizeRemoteReadError(error);
+      this.publish("error", remoteError.message, remoteError.kind);
+      if (localPlan) return localPlan;
+      throw remoteError;
     }
   }
 
@@ -259,7 +279,11 @@ export class SyncedPlanRepository implements PlanRepository {
       this.publish(acknowledged.pendingRevision === null ? "synced" : "syncing");
       return result;
     } catch (error: unknown) {
-      this.publish("error", error instanceof Error ? error.message : "Cloud sync failed.");
+      this.publish(
+        "error",
+        error instanceof Error ? error.message : "Cloud sync failed.",
+        error instanceof RemotePlanReadError ? error.kind : "operation",
+      );
       return { status: "saved", revision: localPlan?.revision ?? state.remoteRevision };
     }
   }
@@ -269,9 +293,17 @@ export class SyncedPlanRepository implements PlanRepository {
     const unsubscribeRemote = this.remote.subscribe(
       accountId,
       (remoteSnapshot) => {
-        void this.handleRemoteSnapshot(accountId, remoteSnapshot, onRemoteChange);
+        void this.handleRemoteSnapshot(accountId, remoteSnapshot, onRemoteChange).catch(
+          (error: unknown) => {
+            this.publish(
+              "error",
+              error instanceof Error ? error.message : "Cloud update could not be applied.",
+              error instanceof RemotePlanReadError ? error.kind : "operation",
+            );
+          },
+        );
       },
-      (error) => this.publish("error", error.message),
+      (error) => this.publish("error", error.message, error.kind),
     );
     const startupConflict = this.startupConflicts.get(accountId);
     if (startupConflict) {

@@ -61,6 +61,17 @@ export function Planner(props: PlannerProps) {
             <span>{state.saveError} 当前页面仍可计算和编辑，请不要在恢复前关闭。</span>
           </section>
         ) : null}
+        {state.constraintError ? (
+          <section className="constraint-banner" role="alert">
+            <div>
+              <strong>这次修改没有保存</strong>
+              <span>{state.constraintError} 原计划和计算结果保持不变。</span>
+            </div>
+            <button type="button" onClick={() => dispatch({ type: "constraint-dismissed" })}>
+              知道了
+            </button>
+          </section>
+        ) : null}
         <div className="planner-layout">
           <Navigation {...props} />
           <main className="planner-main" aria-live="polite">

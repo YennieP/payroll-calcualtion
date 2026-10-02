@@ -1,6 +1,7 @@
 import type { Dispatch } from "react";
 
 import type { AppAction } from "../../app/appReducer";
+import { MAX_GOALS_PER_CATEGORY, MAX_MONTHLY_GOAL_AMOUNT_CENTS } from "../../domain/plan";
 import type { BudgetMode, Category, Goal } from "../../domain/plan";
 import { BUDGET_MODE_LABELS, dollarsToCents } from "./formatters";
 
@@ -13,6 +14,7 @@ interface GoalRowProps {
   showSource?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
+  constraintSequence: number;
 }
 
 export function GoalRow({
@@ -24,6 +26,7 @@ export function GoalRow({
   showSource = false,
   isFirst = false,
   isLast = false,
+  constraintSequence,
 }: GoalRowProps) {
   const update = (changes: Partial<Goal>) =>
     dispatch({
@@ -47,7 +50,7 @@ export function GoalRow({
           ⌖
         </button>
         <input
-          key={`${goal.id}:${goal.name}`}
+          key={`${goal.id}:${goal.name}:${constraintSequence}`}
           className="goal-name-input"
           defaultValue={goal.name}
           aria-label={`${goal.name}名称`}
@@ -82,9 +85,10 @@ export function GoalRow({
       <label className="row-money-field">
         <span>$</span>
         <input
-          key={`${goal.id}:${goal.monthlyAmountCents}`}
+          key={`${goal.id}:${goal.monthlyAmountCents}:${constraintSequence}`}
           type="number"
           min="0"
+          max={MAX_MONTHLY_GOAL_AMOUNT_CENTS / 100}
           step="10"
           defaultValue={goal.monthlyAmountCents / 100}
           aria-label={`${goal.name}每月金额`}
@@ -141,7 +145,13 @@ export function GoalRow({
               }
             >
               {categories.map((option) => (
-                <option key={option.id} value={option.id}>
+                <option
+                  key={option.id}
+                  value={option.id}
+                  disabled={
+                    option.id !== category.id && option.goals.length >= MAX_GOALS_PER_CATEGORY
+                  }
+                >
                   {option.name}
                 </option>
               ))}

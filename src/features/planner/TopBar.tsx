@@ -1,6 +1,7 @@
 import type { Dispatch, ReactNode } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
+import { MAX_MONTHLY_PRETAX_DEDUCTION_CENTS } from "../../domain/plan";
 import type { FilingStatus } from "../../domain/plan";
 import { dollarsToCents, FILING_STATUS_LABELS } from "./formatters";
 import { getThemeOption, THEME_OPTIONS } from "./themeOptions";
@@ -160,6 +161,7 @@ export function TopBar({ state, dispatch, createMetadata, isOnline, accountContr
                 <input
                   type="number"
                   min="0"
+                  max={MAX_MONTHLY_PRETAX_DEDUCTION_CENTS / 100}
                   step="50"
                   value={profile.monthlyPretaxDeductionCents / 100}
                   onChange={(event) =>

@@ -1,4 +1,5 @@
 import type { BudgetMode, Category, Goal, PlanDocument, TaxProfile, ThemeId } from "./types";
+import { parsePlanDocument } from "./validation";
 
 export interface MutationMetadata {
   updatedAt: string;
@@ -24,7 +25,11 @@ export type GoalChanges = Partial<
 >;
 
 function touch(plan: PlanDocument, metadata: MutationMetadata): PlanDocument {
-  return { ...plan, updatedAt: metadata.updatedAt, updatedByDevice: metadata.updatedByDevice };
+  return parsePlanDocument({
+    ...plan,
+    updatedAt: metadata.updatedAt,
+    updatedByDevice: metadata.updatedByDevice,
+  });
 }
 
 function reorder<T extends { order: number }>(items: T[]): T[] {

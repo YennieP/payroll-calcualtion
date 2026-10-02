@@ -9,6 +9,7 @@ import type {
   RemotePlanTombstone,
   RemoteSaveResult,
 } from "../../ports/RemotePlanRepository";
+import { RemotePlanReadError } from "../../ports/RemotePlanRepository";
 
 function readTombstone(value: Record<string, unknown>): RemotePlanTombstone {
   const keys = Object.keys(value);
@@ -35,6 +36,28 @@ function readRemoteSnapshot(value: unknown): RemotePlanSnapshot {
   return { kind: "plan", plan: migratePlanDocument(value) };
 }
 
+function corruptRemoteData(error: unknown): RemotePlanReadError {
+  if (error instanceof RemotePlanReadError) return error;
+  return new RemotePlanReadError("corrupt", "云端计划的数据结构不兼容或已损坏，已停止自动载入。", {
+    cause: error,
+  });
+}
+
+function unavailableRemoteData(error: unknown): RemotePlanReadError {
+  if (error instanceof RemotePlanReadError) return error;
+  return new RemotePlanReadError("unavailable", "云端计划暂时无法读取，请检查网络后重试。", {
+    cause: error,
+  });
+}
+
+function parseRemoteSnapshot(value: unknown): RemotePlanSnapshot {
+  try {
+    return readRemoteSnapshot(value);
+  } catch (error: unknown) {
+    throw corruptRemoteData(error);
+  }
+}
+
 function snapshotRevision(snapshot: RemotePlanSnapshot | null): number {
   if (!snapshot) return 0;
   return snapshot.kind === "plan" ? snapshot.plan.revision : snapshot.tombstone.revision;
@@ -48,8 +71,13 @@ export class FirebasePlanRepository implements RemotePlanRepository {
   }
 
   async load(accountId: string): Promise<RemotePlanSnapshot | null> {
-    const snapshot = await getDoc(this.reference(accountId));
-    return snapshot.exists() ? readRemoteSnapshot(snapshot.data()) : null;
+    let snapshot;
+    try {
+      snapshot = await getDoc(this.reference(accountId));
+    } catch (error: unknown) {
+      throw unavailableRemoteData(error);
+    }
+    return snapshot.exists() ? parseRemoteSnapshot(snapshot.data()) : null;
   }
 
   async push(
@@ -65,7 +93,7 @@ export class FirebasePlanRepository implements RemotePlanRepository {
     return runTransaction(this.firestore, async (transaction) => {
       const reference = this.reference(accountId);
       const snapshot = await transaction.get(reference);
-      const remote = snapshot.exists() ? readRemoteSnapshot(snapshot.data()) : null;
+      const remote = snapshot.exists() ? parseRemoteSnapshot(snapshot.data()) : null;
       const actualRevision = snapshotRevision(remote);
       if (actualRevision !== expectedRemoteRevision) {
         if (!remote) throw new Error("Remote revision conflict has no plan document.");
@@ -79,14 +107,22 @@ export class FirebasePlanRepository implements RemotePlanRepository {
   subscribe(
     accountId: string,
     onRemoteChange: (snapshot: RemotePlanSnapshot) => void,
-    onError: (error: Error) => void,
+    onError: (error: RemotePlanReadError) => void,
   ): () => void {
     return onSnapshot(
       this.reference(accountId),
       (snapshot) => {
-        if (snapshot.exists()) onRemoteChange(readRemoteSnapshot(snapshot.data()));
+        if (!snapshot.exists()) return;
+        let remoteSnapshot: RemotePlanSnapshot;
+        try {
+          remoteSnapshot = parseRemoteSnapshot(snapshot.data());
+        } catch (error: unknown) {
+          onError(corruptRemoteData(error));
+          return;
+        }
+        onRemoteChange(remoteSnapshot);
       },
-      (error) => onError(error),
+      (error) => onError(unavailableRemoteData(error)),
     );
   }
 
@@ -98,7 +134,7 @@ export class FirebasePlanRepository implements RemotePlanRepository {
     return runTransaction(this.firestore, async (transaction) => {
       const reference = this.reference(accountId);
       const snapshot = await transaction.get(reference);
-      const remote = snapshot.exists() ? readRemoteSnapshot(snapshot.data()) : null;
+      const remote = snapshot.exists() ? parseRemoteSnapshot(snapshot.data()) : null;
       const revision = Math.max(tombstone.revision, snapshotRevision(remote) + 1);
       transaction.set(reference, { ...tombstone, revision });
       return { revision };

@@ -1,7 +1,11 @@
 import type { Dispatch } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
-import { selectCategorySummaries, selectPinnedSubtotalCents } from "../../domain/plan";
+import {
+  MAX_PLAN_CATEGORIES,
+  selectCategorySummaries,
+  selectPinnedSubtotalCents,
+} from "../../domain/plan";
 import { formatMoney } from "./formatters";
 
 interface NavigationProps {
@@ -24,6 +28,12 @@ export function Navigation({ state, dispatch, createId, createMetadata }: Naviga
         <button
           type="button"
           aria-label="添加分类"
+          disabled={state.plan.categories.length >= MAX_PLAN_CATEGORIES}
+          title={
+            state.plan.categories.length >= MAX_PLAN_CATEGORIES
+              ? "一个计划最多可包含 50 个分类"
+              : undefined
+          }
           onClick={() =>
             dispatch({
               type: "category-added",

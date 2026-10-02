@@ -29,13 +29,12 @@ export class MemoryPlanRepository implements LocalPlanSyncRepository {
   }
 
   async save(accountId: string, plan: PlanDocument, expectedRevision: number): Promise<SaveResult> {
-    parsePlanDocument(plan);
     const current = this.entries.get(accountId);
     if ((current?.plan?.revision ?? 0) !== expectedRevision) {
       if (!current?.plan) throw new Error("Memory revision conflict has no local plan.");
       return { status: "conflict", remote: current.plan };
     }
-    const savedPlan = { ...plan, revision: expectedRevision + 1 };
+    const savedPlan = parsePlanDocument({ ...plan, revision: expectedRevision + 1 });
     this.entries.set(accountId, {
       plan: savedPlan,
       syncState: current?.syncState ?? null,

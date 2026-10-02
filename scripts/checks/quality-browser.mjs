@@ -261,6 +261,16 @@ try {
   await amount.fill("500000");
   await amount.press("Tab");
   await waitForSaved(page);
+  await amount.fill("500001");
+  await amount.press("Tab");
+  const constraintBanner = page.locator(".constraint-banner");
+  await constraintBanner.getByText("单个目标的每月金额不能超过 $500,000。").waitFor();
+  if ((await amount.inputValue()) !== "500000") {
+    throw new Error(
+      `Rejected amount did not restore the last valid value: ${await amount.inputValue()}.`,
+    );
+  }
+  await constraintBanner.getByRole("button", { name: "知道了" }).click();
 
   for (const theme of themes) {
     await page.getByRole("button", { name: /主题/ }).click();
@@ -370,7 +380,7 @@ try {
   }
 
   console.log(
-    "Quality browser check passed: 50 goals, three empty states, 120-character labels, a $500,000 monthly value, seven-theme WCAG scans, keyboard focus, and 320–2000px layouts.",
+    "Quality browser check passed: 50 goals, three empty states, 120-character labels, a $500,000 monthly boundary with recoverable rejection, seven-theme WCAG scans, keyboard focus, and 320–2000px layouts.",
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

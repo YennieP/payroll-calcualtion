@@ -19,13 +19,46 @@ service cloud.firestore {
         ])
         && request.resource.data.schemaVersion == 1
         && request.resource.data.planId is string
+        && request.resource.data.planId.size() == 36
         && request.resource.data.revision is int
         && request.resource.data.revision > 0
         && request.resource.data.updatedAt is string
+        && request.resource.data.updatedAt.size() > 0
+        && request.resource.data.updatedAt.size() <= 40
         && request.resource.data.updatedByDevice is string
+        && request.resource.data.updatedByDevice.size() == 36
         && request.resource.data.taxProfile is map
+        && request.resource.data.taxProfile.keys().hasOnly([
+          'state',
+          'filingStatus',
+          'monthlyPretaxDeductionCents',
+          'bufferBasisPoints',
+          'planningYear',
+          'taxRuleVersion'
+        ])
+        && request.resource.data.taxProfile.state == 'CA'
+        && request.resource.data.taxProfile.filingStatus in ['single', 'married', 'head']
+        && request.resource.data.taxProfile.monthlyPretaxDeductionCents is int
+        && request.resource.data.taxProfile.monthlyPretaxDeductionCents >= 0
+        && request.resource.data.taxProfile.monthlyPretaxDeductionCents <= 50000000
+        && request.resource.data.taxProfile.bufferBasisPoints is int
+        && request.resource.data.taxProfile.bufferBasisPoints >= 0
+        && request.resource.data.taxProfile.bufferBasisPoints <= 10000
+        && request.resource.data.taxProfile.planningYear == 2026
+        && request.resource.data.taxProfile.taxRuleVersion == 'us-ca-w2-2026-v1'
         && request.resource.data.preferences is map
-        && request.resource.data.categories is list;
+        && request.resource.data.preferences.keys().hasOnly(['themeId'])
+        && request.resource.data.preferences.themeId in [
+          'rouge',
+          'midnight',
+          'violet-amber',
+          'violet-crimson',
+          'violet-blue',
+          'gold-opera',
+          'scarlet-opera'
+        ]
+        && request.resource.data.categories is list
+        && request.resource.data.categories.size() <= 50;
     }
 
     function hasValidTombstoneShape() {
@@ -37,7 +70,9 @@ service cloud.firestore {
         && request.resource.data.kind == 'deleted'
         && request.resource.data.revision is int
         && request.resource.data.revision > 0
-        && request.resource.data.deletedAt is string;
+        && request.resource.data.deletedAt is string
+        && request.resource.data.deletedAt.size() > 0
+        && request.resource.data.deletedAt.size() <= 40;
     }
 
     function hasValidRemoteShape() {

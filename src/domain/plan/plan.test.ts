@@ -142,6 +142,41 @@ describe("plan validation and migration", () => {
     }
   });
 
+  it("rejects unknown nested fields and unregistered tax-rule versions", () => {
+    const invalid = {
+      ...plan,
+      taxProfile: { ...plan.taxProfile, taxRuleVersion: "us-ca-w2-2099-v1", hidden: true },
+      preferences: { ...plan.preferences, hidden: true },
+      categories: [
+        {
+          ...plan.categories[0],
+          hidden: true,
+          goals: [{ ...plan.categories[0].goals[0], hidden: true }],
+        },
+      ],
+    };
+    const result = validatePlanDocument(invalid);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: "taxProfile.hidden", code: "unexpected_field" }),
+          expect.objectContaining({
+            path: "taxProfile.taxRuleVersion",
+            code: "invalid_tax_rule_version",
+          }),
+          expect.objectContaining({ path: "preferences.hidden", code: "unexpected_field" }),
+          expect.objectContaining({ path: "categories[0].hidden", code: "unexpected_field" }),
+          expect.objectContaining({
+            path: "categories[0].goals[0].hidden",
+            code: "unexpected_field",
+          }),
+        ]),
+      );
+    }
+  });
+
   it("migrates version 0 while preserving IDs and source amounts", () => {
     const version0 = JSON.parse(JSON.stringify(plan)) as Record<string, unknown>;
     version0.schemaVersion = 0;

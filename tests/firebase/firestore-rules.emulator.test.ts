@@ -19,7 +19,14 @@ const VALID_PLAN = {
   revision: 1,
   updatedAt: "2026-10-01T20:00:00.000Z",
   updatedByDevice: "30000000-0000-4000-8000-000000000001",
-  taxProfile: { state: "CA" },
+  taxProfile: {
+    state: "CA",
+    filingStatus: "single",
+    monthlyPretaxDeductionCents: 50_000,
+    bufferBasisPoints: 500,
+    planningYear: 2026,
+    taxRuleVersion: "us-ca-w2-2026-v1",
+  },
   preferences: { themeId: "rouge" },
   categories: [],
 };
@@ -81,5 +88,62 @@ describe("owner-scoped Firestore rules", () => {
     await assertFails(updateDoc(doc(other, "plans", OWNER_ID), { revision: 2 }));
     await assertFails(deleteDoc(doc(other, "plans", OWNER_ID)));
     await assertFails(setDoc(doc(owner, "private", OWNER_ID), { value: true }));
+  });
+
+  it("rejects every nested profile and preference shape that rules can validate", async () => {
+    const owner = environment.authenticatedContext(OWNER_ID).firestore();
+    const reference = doc(owner, "plans", OWNER_ID);
+
+    await assertFails(
+      setDoc(reference, {
+        ...VALID_PLAN,
+        taxProfile: { ...VALID_PLAN.taxProfile, filingStatus: "joint" },
+      }),
+    );
+    await assertFails(
+      setDoc(reference, {
+        ...VALID_PLAN,
+        taxProfile: { ...VALID_PLAN.taxProfile, monthlyPretaxDeductionCents: 50_000_001 },
+      }),
+    );
+    await assertFails(
+      setDoc(reference, {
+        ...VALID_PLAN,
+        taxProfile: { ...VALID_PLAN.taxProfile, taxRuleVersion: "unregistered-rules" },
+      }),
+    );
+    await assertFails(
+      setDoc(reference, {
+        ...VALID_PLAN,
+        taxProfile: { ...VALID_PLAN.taxProfile, unexpected: true },
+      }),
+    );
+    await assertFails(
+      setDoc(reference, {
+        ...VALID_PLAN,
+        preferences: { themeId: "rouge", unexpected: true },
+      }),
+    );
+    await assertFails(
+      setDoc(reference, {
+        ...VALID_PLAN,
+        preferences: { themeId: "unknown-theme" },
+      }),
+    );
+  });
+
+  it("enforces the rules-expressible category count boundary", async () => {
+    const owner = environment.authenticatedContext(OWNER_ID).firestore();
+    const reference = doc(owner, "plans", OWNER_ID);
+    const categories = Array.from({ length: 50 }, (_, index) => ({ index }));
+    const taxProfile = {
+      ...VALID_PLAN.taxProfile,
+      monthlyPretaxDeductionCents: 50_000_000,
+    };
+
+    await assertSucceeds(setDoc(reference, { ...VALID_PLAN, taxProfile, categories }));
+    await assertFails(
+      setDoc(reference, { ...VALID_PLAN, revision: 2, categories: [...categories, {}] }),
+    );
   });
 });

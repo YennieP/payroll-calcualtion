@@ -6,6 +6,7 @@ import {
   moveCategory,
   moveGoalToCategory,
   moveGoalWithinCategory,
+  PlanConstraintError,
   selectTheme,
   updateCategory,
   updateGoal,
@@ -37,6 +38,8 @@ export interface AppState {
   saveStatus: SaveStatus;
   saveError: string | null;
   conflictingPlan: PlanDocument | null;
+  constraintError: string | null;
+  constraintSequence: number;
   editSequence: number;
 }
 
@@ -49,6 +52,7 @@ export type AppAction =
   | { type: "plan-imported"; plan: PlanDocument }
   | { type: "plan-deleted"; replacement: PlanDocument }
   | { type: "storage-failed"; message: string }
+  | { type: "constraint-dismissed" }
   | { type: "navigate-pinned" }
   | { type: "navigate-category"; categoryId: string }
   | { type: "search-changed"; query: string }
@@ -117,6 +121,8 @@ export function createInitialAppState(plan: PlanDocument, deviceId: string): App
     saveStatus: "loading",
     saveError: null,
     conflictingPlan: null,
+    constraintError: null,
+    constraintSequence: 0,
     editSequence: 0,
   };
 }
@@ -128,11 +134,12 @@ function withMutation(state: AppState, plan: PlanDocument): AppState {
     plan,
     saveStatus: "local-change",
     saveError: null,
+    constraintError: null,
     editSequence: state.editSequence + 1,
   };
 }
 
-export function appReducer(state: AppState, action: AppAction): AppState {
+function reduceAppState(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "plan-loaded":
       return {
@@ -140,6 +147,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         plan: action.plan,
         saveStatus: action.isNew ? "local-change" : "saved",
         saveError: null,
+        constraintError: null,
       };
     case "plan-imported":
       return {
@@ -150,6 +158,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         saveStatus: "local-change",
         saveError: null,
         conflictingPlan: null,
+        constraintError: null,
         editSequence: state.editSequence + 1,
       };
     case "plan-deleted":
@@ -161,10 +170,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         saveStatus: "saved",
         saveError: null,
         conflictingPlan: null,
+        constraintError: null,
         editSequence: state.editSequence + 1,
       };
     case "storage-failed":
       return { ...state, saveStatus: "error", saveError: action.message };
+    case "constraint-dismissed":
+      return { ...state, constraintError: null };
     case "navigate-pinned":
       return {
         ...state,
@@ -304,5 +316,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             editSequence: state.editSequence + 1,
           }
         : state;
+  }
+}
+
+export function appReducer(state: AppState, action: AppAction): AppState {
+  try {
+    return reduceAppState(state, action);
+  } catch (error: unknown) {
+    if (!(error instanceof PlanConstraintError)) throw error;
+    return {
+      ...state,
+      constraintError: error.message,
+      constraintSequence: state.constraintSequence + 1,
+    };
   }
 }
