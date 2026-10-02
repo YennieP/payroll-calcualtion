@@ -27,10 +27,12 @@ export function useThemeFonts(themeId: ThemeId): ThemeFontState {
           status: result.failures.length === 0 ? "ready" : "fallback",
           failures: result.failures,
         });
-        startIdleFontWarmup(themeId);
       })
       .catch(() => {
         if (!cancelled) setLoadedState({ themeId, status: "fallback", failures: [] });
+      })
+      .finally(() => {
+        if (!cancelled) startIdleFontWarmup();
       });
 
     return () => {

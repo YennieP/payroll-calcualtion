@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { FONT_ASSET_VERSION_PATTERN, FONT_CACHE_PREFIX } from "../font-asset-version.mjs";
+
 const root = process.cwd();
 const requiredArtifacts = ["dist/index.html", "dist/manifest.webmanifest", "dist/sw.js"];
 const missing = requiredArtifacts.filter((path) => !existsSync(join(root, path)));
@@ -49,6 +51,17 @@ if (!index.includes("viewport-fit=cover") || !index.includes("apple-touch-icon")
 }
 
 const serviceWorker = readFileSync(join(root, "dist/sw.js"), "utf8");
+const fontAssetManifest = JSON.parse(
+  readFileSync(join(root, "dist/fonts/asset-manifest.json"), "utf8"),
+);
+if (
+  typeof fontAssetManifest.version !== "string" ||
+  !FONT_ASSET_VERSION_PATTERN.test(fontAssetManifest.version)
+) {
+  console.error("Production font assets do not have a valid content version.");
+  process.exit(1);
+}
+const fontCacheName = `${FONT_CACHE_PREFIX}${fontAssetManifest.version}`;
 const acceptedFontDirectories = [
   "bodoni-moda",
   "zcool-xiaowei",
@@ -72,7 +85,7 @@ if (
 }
 
 if (
-  !serviceWorker.includes("worthwhile-fonts-v1") ||
+  !serviceWorker.includes(fontCacheName) ||
   acceptedFontDirectories.some((directory) => serviceWorker.includes(`fonts/${directory}/`))
 ) {
   console.error(

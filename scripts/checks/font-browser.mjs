@@ -1,7 +1,7 @@
 /* global caches, document, getComputedStyle */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import process from "node:process";
@@ -12,6 +12,10 @@ const root = process.cwd();
 const expectedCachedFontCount = readdirSync(join(root, "public", "fonts"), {
   recursive: true,
 }).filter((file) => String(file).endsWith(".woff2")).length;
+const fontAssetVersion = JSON.parse(
+  readFileSync(join(root, "public", "fonts", "asset-manifest.json"), "utf8"),
+).version;
+const expectedFontCacheName = `worthwhile-fonts-${fontAssetVersion}`;
 
 function findChrome() {
   const candidates = [
@@ -98,6 +102,43 @@ let browser;
 try {
   await waitForServer(fixtureUrl);
   browser = await chromium.launch({ executablePath, headless: true });
+
+  const retryContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const retryPage = await retryContext.newPage();
+  let failedVersionedFont = false;
+  await retryPage.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (
+      !failedVersionedFont &&
+      url.searchParams.get("font-version") === fontAssetVersion &&
+      url.pathname.endsWith(".woff2")
+    ) {
+      failedVersionedFont = true;
+      await route.fulfill({ status: 503, body: "injected font warmup failure" });
+      return;
+    }
+    await route.continue();
+  });
+  await retryPage.goto(`http://127.0.0.1:${port}/payroll-calcualtion/`, {
+    waitUntil: "networkidle",
+  });
+  await retryPage
+    .locator('.planner-app[data-font-library-status="error"]')
+    .waitFor({ timeout: 60_000 });
+  if (!failedVersionedFont) throw new Error("The font warmup failure was not injected.");
+  await retryContext.setOffline(true);
+  await retryPage.getByRole("button", { name: "重试保存字体" }).click();
+  await retryPage.waitForTimeout(500);
+  await retryPage
+    .locator('.planner-app[data-font-library-status="error"]')
+    .waitFor({ timeout: 10_000 });
+  await retryContext.setOffline(false);
+  await retryPage.getByRole("button", { name: "重试保存字体" }).click();
+  await retryPage
+    .locator('.planner-app[data-font-library-status="ready"]')
+    .waitFor({ timeout: 180_000 });
+  await retryContext.close();
+
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
   const page = await context.newPage();
   const failedRequests = [];
@@ -151,31 +192,41 @@ try {
   }
 
   await page.waitForFunction(
-    async (expectedCount) => {
-      const cacheNames = await caches.keys();
-      const entries = await Promise.all(
-        cacheNames.map(async (cacheName) => (await caches.open(cacheName)).keys()),
-      );
+    async ({ cacheName, expectedCount, version }) => {
+      const cache = await caches.open(cacheName);
+      const entries = await cache.keys();
       return (
-        entries.flat().filter((request) => request.url.includes(".woff2")).length >= expectedCount
+        entries.filter((request) => request.url.includes(".woff2")).length === expectedCount &&
+        entries.some((request) => request.url.endsWith(`/fonts/.cache-complete-${version}`))
       );
     },
-    expectedCachedFontCount,
+    {
+      cacheName: expectedFontCacheName,
+      expectedCount: expectedCachedFontCount,
+      version: fontAssetVersion,
+    },
     { timeout: 180_000 },
   );
 
-  const cachedFontCount = await page.evaluate(async () => {
-    const cacheNames = await caches.keys();
-    const entries = await Promise.all(
-      cacheNames.map(async (cacheName) => (await caches.open(cacheName)).keys()),
-    );
-    return entries.flat().filter((request) => request.url.includes(".woff2")).length;
-  });
-  if (cachedFontCount < expectedCachedFontCount) {
+  const cachedFontCount = await page.evaluate(async (cacheName) => {
+    const entries = await (await caches.open(cacheName)).keys();
+    return entries.filter((request) => request.url.includes(".woff2")).length;
+  }, expectedFontCacheName);
+  if (cachedFontCount !== expectedCachedFontCount) {
     throw new Error(
-      `Expected at least ${expectedCachedFontCount} cached WOFF2 files, found ${cachedFontCount}.`,
+      `Expected ${expectedCachedFontCount} cached WOFF2 files, found ${cachedFontCount}.`,
     );
   }
+
+  await page.evaluate(async () => {
+    await caches.open("worthwhile-fonts-obsolete-browser-check");
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator('[data-font-audit="passed"]').waitFor({ timeout: 60_000 });
+  await page.waitForFunction(async () => {
+    const cacheNames = await caches.keys();
+    return !cacheNames.includes("worthwhile-fonts-obsolete-browser-check");
+  });
 
   mkdirSync(join(root, "test-results"), { recursive: true });
   await page.screenshot({

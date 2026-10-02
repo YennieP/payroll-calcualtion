@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成           | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成           | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成           | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 7.1 进行中 | S1–S4 已完成；下一项为 S5 字体离线就绪与缓存升级，Phase 8 继续阻断。                        |
+| 产品实现     | Phase 7.1 进行中 | S1–S5 已完成；下一项为 S6 计划容量与金额范围契约，Phase 8 继续阻断。                        |
 | 部署         | 未开始           | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -195,7 +195,7 @@ React PWA
 
 ## Phase 7.1 — 修复跨阶段集成问题
 
-状态：进行中。S1–S4 已于 2026-10-02 完成并通过完整门禁；下一项为 S5。Phase 8 在本阶段全部退出条件满足前保持阻断。
+状态：进行中。S1–S5 已于 2026-10-02 完成并通过完整门禁；下一项为 S6。Phase 8 在本阶段全部退出条件满足前保持阻断。
 
 ### 执行协议
 
@@ -211,7 +211,7 @@ React PWA
 - [x] **S2 — 保证本地计划与同步元数据原子一致（阻断级）**：让计划、pending revision 和 S1 新增的本地删除意图（含 tombstone revision）在同一可恢复事务边界内提交，或提供等价的启动自愈规则。注入计划写入、同步状态写入、删除各步骤和进程中断故障，证明本地新版本不会被旧云端静默替换、待同步删除不会丢失。
 - [x] **S3 — 分离本地持久化与云端 debounce（高优先级）**：每次本地修改立即通过 S2 的原子计划/同步记录进入 IndexedDB，仅延迟/合并远端 `flush()`；覆盖编辑后 250ms 内关闭、页面卸载、PWA 更新和会话切换。
 - [x] **S4 — 加固认证恢复与退出登录（高优先级）**：首次认证状态确定前不开放可编辑匿名会话；退出前处理 local-change、syncing、offline、error 和 conflict，提供等待同步、导出或明确放弃修改的安全路径；不能把 S3 的 UI `saved`（仅表示已保存到本机）当作云端完成，必须同时检查账户级 pending/sync 状态；使用 S2 的原子账户清理，但必须验证 sign-out 失败不会先清除可恢复数据。
-- [ ] **S5 — 修正字体离线就绪与缓存升级（高优先级）**：区分应用外壳可离线和全部七主题字体已缓存；warmup 失败可重试；缓存和资产清单由内容版本驱动并清理旧版本。覆盖 warmup 完成前断网、失败重试及字体版本升级。
+- [x] **S5 — 修正字体离线就绪与缓存升级（高优先级）**：区分应用外壳可离线和全部七主题字体已缓存；warmup 失败可重试；缓存和资产清单由内容版本驱动并清理旧版本。覆盖 warmup 完成前断网、失败重试及字体版本升级。
 - [ ] **S6 — 建立计划容量与金额范围契约（高优先级）**：为分类/目标数量、UTF-8 序列化大小、单项与聚合金额设置 Domain、导入、UI 和 Repository 一致的边界；在 Firestore 1 MiB 和税务求解上限前给出可恢复提示，不允许渲染期 `RangeError` 崩溃。
 - [ ] **S7 — 对齐 Firestore Rules 与加载错误语义（中优先级）**：收紧可由 Rules 表达的嵌套字段、枚举和数量约束；明确区分云端不存在、暂时不可用和数据损坏；adapter 解析失败必须进入受控错误状态。增加恶意嵌套数据和远端暂时失败测试。
 - [ ] **S8 — 扩充跨阶段权威门禁并最终复核（收口）**：把 S1–S7 的真实 Repository、Firebase Emulator、双浏览器、PWA/字体升级和异常注入场景纳入 `npm run verify`，并保留 S3 的 StrictMode 生命周期重放、旧 flush/新编辑交叠、PWA 更新卸载和账户切换回归；重新审阅 Phase 1–7 的退出条件和发布验收清单，并确认没有遗留跨阶段冲突。
@@ -275,6 +275,21 @@ React PWA
 11. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-02 — 完成 Phase 7.1 S5 字体离线就绪与缓存升级修复
+
+- 字体库新增独立的 `idle / warming / ready / error` 状态；Workbox 的 `offline-ready` 只报告应用外壳，只有当前内容版本的 11 个 CSS 和 582 个 WOFF2 全部缓存后才显示“完整离线模式已就绪”。字体 warmup 失败会显示可重试入口，活动主题的 `loading / ready / fallback` 保持独立。
+- `asset-manifest.json` 版本改为全部 CSS/WOFF2 路径和内容的稳定 SHA-256 摘要，Vite、Service Worker runtime cache 和运行时字体加载器共用 `worthwhile-fonts-<content-digest>`。下载使用版本查询参数绕过旧 Service Worker 响应，但按 canonical URL 写入当前缓存；离线 FontFace 回退只读取当前版本，避免新旧字体混用。
+- 新版本只有在每项资产均可从当前缓存读取并写入 complete marker 后才进入 ready，再清理其他 `worthwhile-fonts-*`。部分失败保留当前下载进度和旧完整缓存，释放运行中 Promise 后允许同页重试；当前版本已完整时仍会补做旧缓存清理。
+- 新增单元/组件回归和真实 Chrome 故障注入，覆盖 shell/font 文案分离、失败重试、warmup 中断网、恢复联网、部分缓存续传、内容版本 cache、complete marker 和旧缓存清理。完整 `npm run verify` 通过：18 个测试文件、91 项单元/组件测试、生产构建与预算、PWA 两轮离线重开、七主题/582 个 WOFF2、320–2000px 质量与可访问性、Firebase Emulator 和双浏览器同步检查均通过。
+- 基于 S5 后最新仓库复核 S6–S8：S6 仍是下一项且根因、优先级与顺序不变；容量契约仍需同时约束 Domain、导入、UI、Repository 和安全退出 JSON 导出。S7 的 Rules 深层字段/数量约束及“远端不存在、暂时不可用、数据损坏”语义未被 S5 改变。S8 必须保留 S5 的内容摘要一致性、失败重试、warmup 前断网、旧缓存清理和 shell/font 文案回归，并继续覆盖 S4 的全屏认证/清理门禁；Phase 8 继续阻断。
+
+### 2026-10-02 — 启动 Phase 7.1 S5 字体离线就绪与缓存升级修复
+
+- 现状复核确认 Workbox 的 `offline-ready` 只证明应用外壳可离线，但界面错误声称七主题字体已全部保存；字体完整缓存需要独立的 `idle / warming / ready / error` 状态和可见的失败重试入口，活动主题字体的 `loading / ready / fallback` 状态保持独立。
+- 当前一次性 `warmupStarted` 标记在失败后不会复位，错误又被静默吞掉；S5 将把 warmup 改为可订阅、可重试的状态机，并保证 warmup 完成前断网时只报告外壳就绪，不夸大离线能力。
+- 字体资产清单和 Cache Storage 名称将由全部 CSS/WOFF2 的路径与内容摘要驱动。只有新版本 582 个 WOFF2 和 11 个 CSS 全部写入并标记完成后才切换为 ready 并清理旧字体缓存；失败时保留旧的完整缓存，避免升级中断破坏已有离线字体。
+- 针对性测试将覆盖 warmup 前断网、部分下载失败后重试、内容版本变化、旧缓存清理和 shell/font 文案分离；本轮不改变七主题、11 个字体家族、主题字体映射、完整 glyph 覆盖、计划容量或 Firestore 校验。
 
 ### 2026-10-02 — 完成 Phase 7.1 S4 认证恢复与安全退出修复
 
@@ -483,7 +498,7 @@ Last updated: 2026-10-02
 | Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
 | Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
 | Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 7.1 active | S1–S4 are complete; S5 font offline readiness and cache upgrades are next, and Phase 8 remains blocked.        |
+| Product implementation | Phase 7.1 active | S1–S5 are complete; S6 plan-capacity and money-range contracts are next, and Phase 8 remains blocked.          |
 | Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
 
 ## Architecture baseline
@@ -666,7 +681,7 @@ Exit criteria:
 
 ## Phase 7.1 — Resolve cross-phase integration gaps
 
-Status: In progress. S1–S4 passed the complete gate on 2026-10-02, and S5 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
+Status: In progress. S1–S5 passed the complete gate on 2026-10-02, and S6 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
 
 ### Execution protocol
 
@@ -682,7 +697,7 @@ Status: In progress. S1–S4 passed the complete gate on 2026-10-02, and S5 is n
 - [x] **S2 — Make local plan and sync metadata atomic (blocker)**: commit the plan, pending revision, and the local deletion intent introduced by S1 (including its tombstone revision) within one recoverable transaction boundary, or provide equivalent startup recovery rules. Inject plan-write, sync-state-write, every deletion step, and process-interruption failures, and prove that an old cloud revision cannot silently replace a newer local version or lose a pending deletion.
 - [x] **S3 — Separate local persistence from cloud debounce (high)**: persist every local edit immediately through S2's atomic plan/sync record and delay/coalesce only remote `flush()` calls. Cover closing within 250ms, page unmount, PWA update, and session switching.
 - [x] **S4 — Harden auth restoration and sign-out (high)**: do not expose an editable anonymous session before the first auth state resolves; handle local-change, syncing, offline, error, and conflict before sign-out with safe wait, export, or explicit-discard paths; do not treat S3's UI `saved` state (local persistence only) as cloud completion, and inspect account-level pending/sync state as well; use S2's atomic account cleanup, but prove sign-out failure cannot clear recoverable data first.
-- [ ] **S5 — Correct font offline readiness and cache upgrades (high)**: distinguish shell readiness from complete seven-theme font caching; retry failed warmup; version caches and manifests by content and remove obsolete versions. Cover going offline before warmup completes, retry after failure, and font-version upgrades.
+- [x] **S5 — Correct font offline readiness and cache upgrades (high)**: distinguish shell readiness from complete seven-theme font caching; retry failed warmup; version caches and manifests by content and remove obsolete versions. Cover going offline before warmup completes, retry after failure, and font-version upgrades.
 - [ ] **S6 — Establish plan-capacity and money-range contracts (high)**: align Domain, import, UI, and Repository limits for category/goal counts, UTF-8 serialized bytes, individual values, and aggregates. Surface recoverable messages before Firestore's 1 MiB limit or the tax solver ceiling; rendering must not crash with `RangeError`.
 - [ ] **S7 — Align Firestore Rules and cloud-load error semantics (medium)**: tighten nested fields, enums, and count limits that Rules can express; distinguish missing, temporarily unavailable, and corrupt cloud data; route adapter parse failures into a controlled error state. Add malformed nested-data and transient-load tests.
 - [ ] **S8 — Expand the authoritative cross-phase gate and re-audit (closeout)**: add S1–S7 scenarios to real Repository, Firebase Emulator, two-browser, PWA/font-upgrade, and failure-injection coverage under `npm run verify`, retaining S3's StrictMode replay, older-flush/newer-edit overlap, PWA-update unmount, and account-switch regressions; re-review every Phase 1–7 exit criterion and the release checklist, with no unresolved cross-phase conflict.
@@ -746,6 +761,21 @@ Exit criteria:
 11. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-02 — Phase 7.1 S5 font-offline-readiness and cache-upgrade repair completed
+
+- The font library now exposes an independent `idle / warming / ready / error` state. Workbox `offline-ready` reports only the application shell, and the UI says “complete offline mode” only after the current content version's 11 CSS and 582 WOFF2 assets are cached. A failed warmup exposes a retry action, while active-theme `loading / ready / fallback` stays independent.
+- `asset-manifest.json` is now versioned by a stable SHA-256 digest of every CSS/WOFF2 path and file content. Vite, the Service Worker runtime cache, and the runtime loader share `worthwhile-fonts-<content-digest>`. Versioned download URLs bypass stale Service Worker responses but are stored under canonical URLs; offline `FontFace` fallback reads only the current cache so releases cannot mix old and new font bytes.
+- A new version becomes ready only after every asset can be read from the current cache and a complete marker is written; only then are other `worthwhile-fonts-*` caches removed. Partial failure preserves downloaded progress and the prior complete cache, releases the in-flight promise for same-page retry, and a previously complete current cache still cleans obsolete versions.
+- Added unit/component regressions and real-Chrome failure injection for separate shell/font copy, retry after failure, going offline during warmup, reconnect recovery, partial-cache continuation, content-version cache naming, the complete marker, and obsolete-cache cleanup. The complete `npm run verify` passed: 18 test files, 91 unit/component tests, production build and budgets, two PWA offline reopen cycles, all seven themes and 582 WOFF2 files, 320–2000px quality/accessibility checks, Firebase Emulator tests, and real two-browser synchronization.
+- Re-audited S6–S8 against the post-S5 repository. S6 remains next with unchanged cause, priority, and order; its capacity contract must still align Domain, import, UI, Repository, and safe-sign-out JSON export. S7's deep Rules field/count validation and distinct missing/temporary/corrupt remote semantics are unchanged by S5. S8 must retain S5's digest consistency, failed retry, pre-warmup offline, obsolete-cache cleanup, and shell/font-copy regressions together with S4's full-screen auth/cleanup gates. Phase 8 remains blocked.
+
+### 2026-10-02 — Phase 7.1 S5 font-offline-readiness and cache-upgrade repair started
+
+- The current audit confirms that Workbox `offline-ready` proves only the application shell is available offline, while the UI incorrectly claims that all seven theme fonts are saved. Complete font caching will gain an independent, observable `idle / warming / ready / error` state with a visible retry path; active-theme `loading / ready / fallback` remains separate.
+- The one-shot `warmupStarted` flag never resets after failure and its error is swallowed. S5 will replace it with a retryable state machine and ensure that going offline before warmup completes reports shell-only readiness instead of overstating offline coverage.
+- The font asset manifest and Cache Storage name will be driven by a digest of every CSS/WOFF2 path and file content. A new version becomes ready and old font caches are removed only after all 582 WOFF2 and 11 CSS assets are written and marked complete; an interrupted upgrade keeps the previous complete cache intact.
+- Focused tests will cover going offline before warmup, retry after partial download failure, content-version changes, obsolete-cache cleanup, and separate shell/font copy. This unit does not alter the seven themes, eleven font families, theme mappings, full glyph coverage, plan-capacity boundaries, or Firestore validation.
 
 ### 2026-10-02 — Phase 7.1 S4 auth-restoration and safe-sign-out repair completed
 

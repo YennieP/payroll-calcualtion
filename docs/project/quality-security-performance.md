@@ -31,11 +31,14 @@
 | 完整字体库              | 21 MiB     | 不适用    | 11 个家族、582 个 WOFF2；保留完整字符覆盖，不删减家族 |
 
 字体库不再进入 Service Worker 的安装期 precache。当前主题字体先加载，其余字体和 Unicode-range
-包在浏览器空闲时按 `public/fonts/asset-manifest.json` 写入 `worthwhile-fonts-v1` Cache Storage；
-Service Worker 对字体采用 CacheFirst。这样保留完整离线字体复现，同时避免首次安装一次性阻塞约
-20 MiB 字体下载。服务器不可用且浏览器的 CSS 字体 URL 进入失败状态时，字体加载器会从同一
-Cache Storage 读取 WOFF2 二进制，并按原样式、字重和 Unicode range 注册等价 `FontFace`；
-完整门禁会在关闭本地服务器后重新打开页面，验证这条回退路径和全部测试字形。
+包在浏览器空闲时按 `public/fonts/asset-manifest.json` 写入
+`worthwhile-fonts-<content-digest>` Cache Storage；Service Worker 对字体采用 CacheFirst。摘要由
+全部 CSS/WOFF2 的路径与内容生成。只有清单中的全部资源写入并留下 complete marker 后，UI 才能
+报告七主题字体完整离线就绪并清理旧版本；失败时保留旧的完整缓存且允许联网重试。这样保留完整
+离线字体复现，同时避免首次安装一次性阻塞约 20 MiB 字体下载。服务器不可用且浏览器的 CSS 字体
+URL 进入失败状态时，字体加载器会从当前内容版本的 Cache Storage 读取 WOFF2 二进制，并按原样式、
+字重和 Unicode range 注册等价 `FontFace`；完整门禁会覆盖 warmup 前断网、失败重试、版本升级、
+旧缓存清理，以及关闭本地服务器后重新打开页面的全部测试字形。
 
 生产构建不得输出 source map。Firebase runtime 必须保持独立异步 chunk；若预算需要提高，应先记录原因和真实测量，再修改本文件与门禁。
 

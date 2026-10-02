@@ -1,11 +1,28 @@
 /// <reference types="vitest/config" />
 
+import { readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+const fontAssetManifest = JSON.parse(
+  readFileSync(new URL("./public/fonts/asset-manifest.json", import.meta.url), "utf8"),
+) as { version?: unknown };
+
+if (
+  typeof fontAssetManifest.version !== "string" ||
+  !/^[a-f0-9]{16}$/.test(fontAssetManifest.version)
+) {
+  throw new Error("Run npm run fonts:sync to generate a content-versioned font manifest.");
+}
+
+const fontAssetVersion = fontAssetManifest.version;
+
 export default defineConfig({
   base: "/payroll-calcualtion/",
+  define: {
+    __FONT_ASSET_VERSION__: JSON.stringify(fontAssetVersion),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -25,7 +42,7 @@ export default defineConfig({
             urlPattern: /\/fonts\/.*\.(?:css|woff2)$/,
             handler: "CacheFirst",
             options: {
-              cacheName: "worthwhile-fonts-v1",
+              cacheName: `worthwhile-fonts-${fontAssetVersion}`,
               cacheableResponse: { statuses: [0, 200] },
             },
           },

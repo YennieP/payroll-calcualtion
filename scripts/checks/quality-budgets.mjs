@@ -2,6 +2,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { gzipSync } from "node:zlib";
 
+import { computeFontAssetVersion, FONT_ASSET_VERSION_PATTERN } from "../font-asset-version.mjs";
+
 const root = process.cwd();
 const distRoot = join(root, "dist");
 const assetsRoot = join(distRoot, "assets");
@@ -80,8 +82,16 @@ if (!existsSync(fontManifestPath)) {
   const manifest = JSON.parse(readFileSync(fontManifestPath, "utf8"));
   const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
   const woff2Assets = assets.filter((path) => typeof path === "string" && path.endsWith(".woff2"));
-  if (manifest.version !== 1 || woff2Assets.length !== 582) {
-    failures.push(`font manifest expected 582 WOFF2 assets, found ${woff2Assets.length}`);
+  const expectedVersion = computeFontAssetVersion(fontRoot, assets);
+  if (
+    typeof manifest.version !== "string" ||
+    !FONT_ASSET_VERSION_PATTERN.test(manifest.version) ||
+    manifest.version !== expectedVersion ||
+    woff2Assets.length !== 582
+  ) {
+    failures.push(
+      `font manifest version/content mismatch or expected 582 WOFF2 assets, found ${woff2Assets.length}`,
+    );
   }
   const totalFontBytes = assets.reduce((total, asset) => {
     const path = join(fontRoot, String(asset));

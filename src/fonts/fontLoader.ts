@@ -19,13 +19,54 @@ export interface FontLoadResult {
   failures: readonly FontAuditFailure[];
 }
 
+export type FontLibraryStatus = "idle" | "warming" | "ready" | "error";
+
+export interface FontLibraryState {
+  status: FontLibraryStatus;
+  errorMessage: string | null;
+  version: string;
+}
+
 const familyLoads = new Map<FontFamilyId, Promise<void>>();
 const cachedFaceLoads = new Map<FontFamilyId, Promise<void>>();
-const FONT_CACHE_NAME = "worthwhile-fonts-v1";
-let warmupStarted = false;
+const FONT_CACHE_PREFIX = "worthwhile-fonts-";
+const FONT_CACHE_NAME = `${FONT_CACHE_PREFIX}${__FONT_ASSET_VERSION__}`;
+const FONT_COMPLETE_MARKER = `.cache-complete-${__FONT_ASSET_VERSION__}`;
+const fontLibraryListeners = new Set<() => void>();
+let fontLibraryState: FontLibraryState = {
+  status: "idle",
+  errorMessage: null,
+  version: __FONT_ASSET_VERSION__,
+};
+let warmupScheduled = false;
+let warmupPromise: Promise<void> | null = null;
 
 function assetUrl(path: string): string {
   return `${import.meta.env.BASE_URL}${path}`;
+}
+
+function absoluteAssetUrl(path: string): string {
+  return new URL(assetUrl(path), globalThis.location.href).href;
+}
+
+function versionedAssetUrl(path: string): string {
+  const url = new URL(assetUrl(path), globalThis.location.href);
+  url.searchParams.set("font-version", __FONT_ASSET_VERSION__);
+  return url.href;
+}
+
+function updateFontLibraryState(next: FontLibraryState): void {
+  fontLibraryState = next;
+  for (const listener of fontLibraryListeners) listener();
+}
+
+export function getFontLibraryState(): FontLibraryState {
+  return fontLibraryState;
+}
+
+export function subscribeFontLibraryState(listener: () => void): () => void {
+  fontLibraryListeners.add(listener);
+  return () => fontLibraryListeners.delete(listener);
 }
 
 function loadStylesheet(familyId: FontFamilyId): Promise<void> {
@@ -188,12 +229,13 @@ async function loadFamilyFromCache(familyId: FontFamilyId): Promise<void> {
     const manifest = FONT_FAMILIES[familyId];
     const { faces, link } = stylesheetFontFaces(familyId);
     const registeredFaces: FontFace[] = [];
+    const cache = await globalThis.caches.open(FONT_CACHE_NAME);
 
     try {
       for (let index = 0; index < faces.length; index += 12) {
         const batch = await Promise.all(
           faces.slice(index, index + 12).map(async ({ url, descriptors }) => {
-            const response = await globalThis.caches.match(url);
+            const response = await cache.match(url);
             if (!response?.ok) throw new Error(`The cached font asset is missing: ${url}`);
             const face = new FontFace(manifest.family, await response.arrayBuffer(), descriptors);
             return face.load();
@@ -243,43 +285,139 @@ export function loadAllFonts(): Promise<FontLoadResult> {
 }
 
 export async function cacheAllFontAssets(): Promise<void> {
-  if (!("caches" in globalThis)) return;
-  const manifestUrl = assetUrl("fonts/asset-manifest.json");
+  if (!("caches" in globalThis)) {
+    throw new Error("This browser cannot store the complete font library offline.");
+  }
+  const manifestPath = "fonts/asset-manifest.json";
+  const manifestUrl = absoluteAssetUrl(manifestPath);
+  const markerUrl = absoluteAssetUrl(`fonts/${FONT_COMPLETE_MARKER}`);
   const cache = await globalThis.caches.open(FONT_CACHE_NAME);
-  const cachedManifest = await cache.match(manifestUrl);
-  const manifestResponse = cachedManifest ?? (await fetch(manifestUrl));
+  const completed = await cache.match(markerUrl);
+  if (completed?.ok) {
+    await deleteObsoleteFontCaches();
+    return;
+  }
+
+  const manifestResponse = await fetch(versionedAssetUrl(manifestPath), { cache: "no-store" });
   if (!manifestResponse.ok) throw new Error("Failed to load the font asset manifest.");
+  const manifestForCache = manifestResponse.clone();
   const manifest = (await manifestResponse.clone().json()) as {
     version?: unknown;
     assets?: unknown;
   };
-  if (manifest.version !== 1 || !Array.isArray(manifest.assets)) {
+  if (
+    manifest.version !== __FONT_ASSET_VERSION__ ||
+    !Array.isArray(manifest.assets) ||
+    manifest.assets.length === 0 ||
+    manifest.assets.some(
+      (path) =>
+        typeof path !== "string" ||
+        path.startsWith("/") ||
+        path.includes("..") ||
+        !/\.(?:css|woff2)$/.test(path),
+    )
+  ) {
     throw new Error("The font asset manifest is invalid.");
   }
 
-  if (!cachedManifest) await cache.put(manifestUrl, manifestResponse);
-  const assets = manifest.assets.filter((path): path is string => typeof path === "string");
+  const assets = manifest.assets as string[];
+  if (new Set(assets).size !== assets.length) {
+    throw new Error("The font asset manifest contains duplicate assets.");
+  }
+
+  await cache.put(manifestUrl, manifestForCache);
   const cachedUrls = new Set((await cache.keys()).map((request) => request.url));
-  const missingAssets = assets.filter((path) => !cachedUrls.has(assetUrl(`fonts/${path}`)));
+  const missingAssets = assets.filter((path) => !cachedUrls.has(absoluteAssetUrl(`fonts/${path}`)));
   for (let index = 0; index < missingAssets.length; index += 16) {
     await Promise.all(
       missingAssets.slice(index, index + 16).map(async (path) => {
-        const url = assetUrl(`fonts/${path}`);
-        const response = await fetch(url);
+        const canonicalUrl = absoluteAssetUrl(`fonts/${path}`);
+        const response = await fetch(versionedAssetUrl(`fonts/${path}`), { cache: "no-store" });
         if (!response.ok) throw new Error(`Failed to warm ${path}.`);
-        await cache.put(url, response);
+        await cache.put(canonicalUrl, response);
       }),
     );
   }
+
+  const missingAfterWarmup = (
+    await Promise.all(
+      assets.map(async (path) =>
+        (await cache.match(absoluteAssetUrl(`fonts/${path}`))) ? null : path,
+      ),
+    )
+  ).filter((path): path is string => path !== null);
+  if (missingAfterWarmup.length > 0) {
+    throw new Error(`The font cache is incomplete: ${missingAfterWarmup[0]}.`);
+  }
+
+  await cache.put(
+    markerUrl,
+    new Response(__FONT_ASSET_VERSION__, {
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    }),
+  );
+  await deleteObsoleteFontCaches();
 }
 
-export function startIdleFontWarmup(activeThemeId: ThemeId): void {
-  if (warmupStarted) return;
-  warmupStarted = true;
-  const activeFamilies = new Set(THEME_FONT_FAMILIES[activeThemeId]);
-  const remaining = ALL_FONT_FAMILY_IDS.filter((familyId) => !activeFamilies.has(familyId));
-  const warm = () =>
-    void Promise.all([loadFontFamilies(remaining), cacheAllFontAssets()]).catch(() => undefined);
+async function deleteObsoleteFontCaches(): Promise<void> {
+  const cacheNames = await globalThis.caches.keys();
+  await Promise.all(
+    cacheNames
+      .filter(
+        (cacheName) => cacheName.startsWith(FONT_CACHE_PREFIX) && cacheName !== FONT_CACHE_NAME,
+      )
+      .map(async (cacheName) => {
+        const deleted = await globalThis.caches.delete(cacheName);
+        if (!deleted) throw new Error(`Failed to remove obsolete font cache ${cacheName}.`);
+      }),
+  );
+}
+
+function runFontWarmup(): Promise<void> {
+  if (fontLibraryState.status === "ready") return Promise.resolve();
+  if (warmupPromise) return warmupPromise;
+
+  updateFontLibraryState({
+    status: "warming",
+    errorMessage: null,
+    version: __FONT_ASSET_VERSION__,
+  });
+  warmupPromise = cacheAllFontAssets()
+    .then(() => {
+      updateFontLibraryState({
+        status: "ready",
+        errorMessage: null,
+        version: __FONT_ASSET_VERSION__,
+      });
+    })
+    .catch((error: unknown) => {
+      updateFontLibraryState({
+        status: "error",
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : "The complete font library could not be saved for offline use.",
+        version: __FONT_ASSET_VERSION__,
+      });
+      throw error;
+    })
+    .finally(() => {
+      warmupPromise = null;
+    });
+  return warmupPromise;
+}
+
+export function retryFontWarmup(): Promise<void> {
+  return runFontWarmup();
+}
+
+export function startIdleFontWarmup(): void {
+  if (fontLibraryState.status === "ready" || warmupPromise || warmupScheduled) return;
+  warmupScheduled = true;
+  const warm = () => {
+    warmupScheduled = false;
+    void runFontWarmup().catch(() => undefined);
+  };
 
   if ("requestIdleCallback" in globalThis) {
     globalThis.requestIdleCallback(warm, { timeout: 4000 });

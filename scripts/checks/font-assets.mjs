@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { computeFontAssetVersion, FONT_ASSET_VERSION_PATTERN } from "../font-asset-version.mjs";
+
 const root = process.cwd();
 const fontRoot = join(root, "public", "fonts");
 const expected = {
@@ -84,11 +86,16 @@ if (!existsSync(assetManifestPath)) {
   const actualCachedAssets = Array.isArray(assetManifest.assets)
     ? [...assetManifest.assets].sort()
     : [];
+  const expectedVersion = computeFontAssetVersion(fontRoot, expectedCachedAssets);
   if (
-    assetManifest.version !== 1 ||
+    typeof assetManifest.version !== "string" ||
+    !FONT_ASSET_VERSION_PATTERN.test(assetManifest.version) ||
+    assetManifest.version !== expectedVersion ||
     actualCachedAssets.join("\n") !== expectedCachedAssets.sort().join("\n")
   ) {
-    failures.push("font asset-manifest.json does not match the accepted CSS and WOFF2 assets");
+    failures.push(
+      "font asset-manifest.json version or asset list does not match the accepted CSS and WOFF2 content",
+    );
   }
 }
 

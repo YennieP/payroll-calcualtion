@@ -1,6 +1,7 @@
 import type { Dispatch, ReactNode } from "react";
 
 import type { AppAction, AppState } from "../../app/appReducer";
+import { useFontLibrary } from "../../fonts/useFontLibrary";
 import { useThemeFonts } from "../../fonts/useThemeFonts";
 import { PwaStatus } from "../../pwa/PwaStatus";
 import { IncomePanel } from "./IncomePanel";
@@ -22,6 +23,7 @@ interface PlannerProps {
 export function Planner(props: PlannerProps) {
   const { state, dispatch } = props;
   const themeFonts = useThemeFonts(state.plan.preferences.themeId);
+  const fontLibrary = useFontLibrary();
   return (
     <div className="planner-stage" data-theme={state.plan.preferences.themeId}>
       <div
@@ -29,6 +31,8 @@ export function Planner(props: PlannerProps) {
         data-theme={state.plan.preferences.themeId}
         data-font-status={themeFonts.status}
         data-font-failures={themeFonts.failures.map((failure) => failure.familyId).join(",")}
+        data-font-library-status={fontLibrary.status}
+        data-font-library-version={fontLibrary.version}
       >
         <TopBar {...props} />
         {state.saveStatus === "conflict" ? (
