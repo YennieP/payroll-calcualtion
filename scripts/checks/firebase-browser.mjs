@@ -50,8 +50,22 @@ async function waitForServer(url) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-async function waitForSaved(page) {
-  await page.locator(".save-indicator.is-saved").waitFor({ state: "attached", timeout: 30_000 });
+async function waitForSaved(page, step) {
+  try {
+    await page.locator(".save-indicator.is-saved").waitFor({ state: "attached", timeout: 30_000 });
+  } catch (error) {
+    const state = await page
+      .evaluate(() => ({
+        saveIndicator: document.querySelector(".save-indicator")?.textContent?.trim() ?? null,
+        conflict: document.querySelector(".conflict-banner")?.textContent?.trim() ?? null,
+        error: document.querySelector(".error-banner")?.textContent?.trim() ?? null,
+      }))
+      .catch(() => null);
+    throw new Error(
+      `${step} did not reach local-saved state: ${JSON.stringify(state)}; ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
 }
 
 async function waitForInputValue(page, label, expected) {
@@ -144,7 +158,7 @@ try {
   const phonePage = await phone.newPage();
 
   await desktopPage.goto(appUrl, { waitUntil: "networkidle" });
-  await waitForSaved(desktopPage);
+  await waitForSaved(desktopPage, "desktop anonymous startup");
   await register(desktopPage, email, password);
   await desktopPage
     .getByRole("heading", { name: "导入这台设备的计划？" })
@@ -155,10 +169,10 @@ try {
   const desktopRent = await waitForInputValue(desktopPage, "房租每月金额", "3200");
   await desktopRent.fill("4100");
   await desktopRent.blur();
-  await waitForSaved(desktopPage);
+  await waitForSaved(desktopPage, "desktop first edit");
 
   await phonePage.goto(appUrl, { waitUntil: "networkidle" });
-  await waitForSaved(phonePage);
+  await waitForSaved(phonePage, "phone anonymous startup");
   await signIn(phonePage, email, password);
   await waitForInputValue(phonePage, "房租每月金额", "4100");
 
@@ -178,11 +192,24 @@ try {
   const currentDesktopRent = desktopPage.getByRole("spinbutton", { name: "房租每月金额" });
   await currentDesktopRent.fill("4300");
   await currentDesktopRent.blur();
-  await waitForSaved(desktopPage);
+  await waitForSaved(desktopPage, "desktop post-offline edit");
   await waitForInputValue(phonePage, "房租每月金额", "4300");
 
   await openAccount(phonePage);
   await phonePage.getByText("云端已同步", { exact: true }).waitFor({ timeout: 30_000 });
+  await phonePage.getByRole("button", { name: "关闭账户面板" }).click();
+
+  await openAccount(desktopPage);
+  await desktopPage.getByRole("button", { name: "删除整份计划" }).click();
+  await desktopPage.getByRole("button", { name: "确认删除" }).click();
+  await waitForInputValue(phonePage, "房租每月金额", "3200");
+  await desktopPage.getByRole("button", { name: "关闭账户面板" }).click();
+
+  const recreatedDesktopRent = desktopPage.getByRole("spinbutton", { name: "房租每月金额" });
+  await recreatedDesktopRent.fill("4400");
+  await recreatedDesktopRent.blur();
+  await waitForSaved(desktopPage, "desktop recreation after deletion");
+  await waitForInputValue(phonePage, "房租每月金额", "4400");
 
   const overflow = await Promise.all(
     [desktopPage, phonePage].map((page) =>
@@ -197,7 +224,7 @@ try {
   await desktop.close();
   await phone.close();
   console.log(
-    "Firebase browser check passed: independent desktop and phone contexts synchronized both directions, including an offline phone edit after reconnection.",
+    "Firebase browser check passed: independent desktop and phone contexts synchronized edits, offline recovery, deletion, and monotonic recreation.",
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

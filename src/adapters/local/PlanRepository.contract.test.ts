@@ -14,9 +14,9 @@ function repositoryContract(name: string, createRepository: () => PlanRepository
     it("loads null, saves with a new revision, notifies, and deletes", async () => {
       const repository = createRepository();
       const plan = createSamplePlan(DEVICE_ID);
-      const received: number[] = [];
+      const received: Array<number | null> = [];
       const unsubscribe = repository.subscribe(ACCOUNT_ID, (remote) => {
-        received.push(remote.revision);
+        received.push(remote?.revision ?? null);
       });
 
       await expect(repository.load(ACCOUNT_ID)).resolves.toBeNull();
@@ -27,9 +27,10 @@ function repositoryContract(name: string, createRepository: () => PlanRepository
       await expect(repository.load(ACCOUNT_ID)).resolves.toMatchObject({ revision: 1 });
       expect(received).toEqual([1]);
 
-      unsubscribe();
       await repository.delete(ACCOUNT_ID);
       await expect(repository.load(ACCOUNT_ID)).resolves.toBeNull();
+      expect(received).toEqual([1, null]);
+      unsubscribe();
     });
 
     it("returns the current remote plan on a stale revision", async () => {

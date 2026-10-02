@@ -1,18 +1,43 @@
-import {
-  deleteDoc,
-  doc,
-  getDoc,
-  onSnapshot,
-  runTransaction,
-  type Firestore,
-} from "firebase/firestore";
+import { doc, getDoc, onSnapshot, runTransaction, type Firestore } from "firebase/firestore";
 
 import { migratePlanDocument, parsePlanDocument } from "../../domain/plan";
 import type { PlanDocument } from "../../domain/plan";
-import type { RemotePlanRepository, RemoteSaveResult } from "../../ports/RemotePlanRepository";
+import type {
+  RemoteDeleteResult,
+  RemotePlanRepository,
+  RemotePlanSnapshot,
+  RemotePlanTombstone,
+  RemoteSaveResult,
+} from "../../ports/RemotePlanRepository";
 
-function readRemotePlan(value: unknown): PlanDocument {
-  return migratePlanDocument(value);
+function readTombstone(value: Record<string, unknown>): RemotePlanTombstone {
+  const keys = Object.keys(value);
+  if (
+    keys.length !== 3 ||
+    !keys.includes("kind") ||
+    !keys.includes("revision") ||
+    !keys.includes("deletedAt") ||
+    value.kind !== "deleted" ||
+    !Number.isSafeInteger(value.revision) ||
+    Number(value.revision) <= 0 ||
+    typeof value.deletedAt !== "string" ||
+    !Number.isFinite(Date.parse(value.deletedAt))
+  ) {
+    throw new Error("The remote deletion tombstone is invalid.");
+  }
+  return value as unknown as RemotePlanTombstone;
+}
+
+function readRemoteSnapshot(value: unknown): RemotePlanSnapshot {
+  if (typeof value === "object" && value !== null && !Array.isArray(value) && "kind" in value) {
+    return { kind: "deleted", tombstone: readTombstone(value as Record<string, unknown>) };
+  }
+  return { kind: "plan", plan: migratePlanDocument(value) };
+}
+
+function snapshotRevision(snapshot: RemotePlanSnapshot | null): number {
+  if (!snapshot) return 0;
+  return snapshot.kind === "plan" ? snapshot.plan.revision : snapshot.tombstone.revision;
 }
 
 export class FirebasePlanRepository implements RemotePlanRepository {
@@ -22,9 +47,9 @@ export class FirebasePlanRepository implements RemotePlanRepository {
     return doc(this.firestore, "plans", accountId);
   }
 
-  async load(accountId: string): Promise<PlanDocument | null> {
+  async load(accountId: string): Promise<RemotePlanSnapshot | null> {
     const snapshot = await getDoc(this.reference(accountId));
-    return snapshot.exists() ? readRemotePlan(snapshot.data()) : null;
+    return snapshot.exists() ? readRemoteSnapshot(snapshot.data()) : null;
   }
 
   async push(
@@ -40,8 +65,8 @@ export class FirebasePlanRepository implements RemotePlanRepository {
     return runTransaction(this.firestore, async (transaction) => {
       const reference = this.reference(accountId);
       const snapshot = await transaction.get(reference);
-      const remote = snapshot.exists() ? readRemotePlan(snapshot.data()) : null;
-      const actualRevision = remote?.revision ?? 0;
+      const remote = snapshot.exists() ? readRemoteSnapshot(snapshot.data()) : null;
+      const actualRevision = snapshotRevision(remote);
       if (actualRevision !== expectedRemoteRevision) {
         if (!remote) throw new Error("Remote revision conflict has no plan document.");
         return { status: "conflict", remote } as const;
@@ -53,19 +78,30 @@ export class FirebasePlanRepository implements RemotePlanRepository {
 
   subscribe(
     accountId: string,
-    onRemoteChange: (plan: PlanDocument) => void,
+    onRemoteChange: (snapshot: RemotePlanSnapshot) => void,
     onError: (error: Error) => void,
   ): () => void {
     return onSnapshot(
       this.reference(accountId),
       (snapshot) => {
-        if (snapshot.exists()) onRemoteChange(readRemotePlan(snapshot.data()));
+        if (snapshot.exists()) onRemoteChange(readRemoteSnapshot(snapshot.data()));
       },
       (error) => onError(error),
     );
   }
 
-  async delete(accountId: string): Promise<void> {
-    await deleteDoc(this.reference(accountId));
+  async delete(
+    accountId: string,
+    requestedTombstone: RemotePlanTombstone,
+  ): Promise<RemoteDeleteResult> {
+    const tombstone = readTombstone(requestedTombstone as unknown as Record<string, unknown>);
+    return runTransaction(this.firestore, async (transaction) => {
+      const reference = this.reference(accountId);
+      const snapshot = await transaction.get(reference);
+      const remote = snapshot.exists() ? readRemoteSnapshot(snapshot.data()) : null;
+      const revision = Math.max(tombstone.revision, snapshotRevision(remote) + 1);
+      transaction.set(reference, { ...tombstone, revision });
+      return { revision };
+    });
   }
 }

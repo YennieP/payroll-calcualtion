@@ -63,12 +63,21 @@ const acceptedFontDirectories = [
   "long-cang",
 ];
 if (
-  !serviceWorker.includes(".woff2") ||
   !serviceWorker.includes("icons/app-icon-192.png") ||
   !serviceWorker.includes("icons/app-icon-512.png") ||
-  acceptedFontDirectories.some((directory) => !serviceWorker.includes(`fonts/${directory}/`))
+  !serviceWorker.includes("fonts/asset-manifest.json")
 ) {
-  console.error("PWA precache does not include install icons and self-hosted font packages.");
+  console.error("PWA precache does not include install icons and the font asset manifest.");
+  process.exit(1);
+}
+
+if (
+  !serviceWorker.includes("worthwhile-fonts-v1") ||
+  acceptedFontDirectories.some((directory) => serviceWorker.includes(`fonts/${directory}/`))
+) {
+  console.error(
+    "Font packages must use the idle-warmed runtime cache instead of the install-time precache.",
+  );
   process.exit(1);
 }
 
@@ -83,6 +92,11 @@ for (const directory of acceptedFontDirectories) {
     console.error(`Production build is missing fonts/${directory}/font.css.`);
     process.exit(1);
   }
+}
+
+if (!existsSync(join(distFontRoot, "asset-manifest.json"))) {
+  console.error("Production build is missing fonts/asset-manifest.json.");
+  process.exit(1);
 }
 
 console.log("PWA build artifacts passed.");

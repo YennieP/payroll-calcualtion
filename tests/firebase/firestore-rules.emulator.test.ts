@@ -24,6 +24,12 @@ const VALID_PLAN = {
   categories: [],
 };
 
+const VALID_TOMBSTONE = {
+  kind: "deleted",
+  revision: 3,
+  deletedAt: "2026-10-02T20:00:00.000Z",
+};
+
 let environment: RulesTestEnvironment;
 
 beforeAll(async () => {
@@ -44,7 +50,7 @@ afterAll(async () => {
 });
 
 describe("owner-scoped Firestore rules", () => {
-  it("allows a valid owner lifecycle while rejecting stale and malformed updates", async () => {
+  it("allows a versioned owner lifecycle while rejecting stale, malformed, and physical deletes", async () => {
     const owner = environment.authenticatedContext(OWNER_ID).firestore();
     const reference = doc(owner, "plans", OWNER_ID);
 
@@ -58,7 +64,10 @@ describe("owner-scoped Firestore rules", () => {
         updatedAt: "2026-10-01T20:01:00.000Z",
       }),
     );
-    await assertSucceeds(deleteDoc(reference));
+    await assertSucceeds(setDoc(reference, VALID_TOMBSTONE));
+    await assertFails(setDoc(reference, { ...VALID_PLAN, revision: 3 }));
+    await assertSucceeds(setDoc(reference, { ...VALID_PLAN, revision: 4 }));
+    await assertFails(deleteDoc(reference));
   });
 
   it("denies unauthenticated, cross-user, and undeclared-path access", async () => {

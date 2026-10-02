@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { MemoryPlanRepository } from "../../adapters/local/MemoryPlanRepository";
-import { MemorySyncStateStore } from "../../adapters/local/MemorySyncStateStore";
 import { createSamplePlan } from "../samplePlan";
 import type { PlanDocument } from "../../domain/plan";
-import type { RemotePlanRepository, RemoteSaveResult } from "../../ports/RemotePlanRepository";
+import type {
+  RemotePlanRepository,
+  RemotePlanSnapshot,
+  RemotePlanTombstone,
+  RemoteSaveResult,
+} from "../../ports/RemotePlanRepository";
 import { SyncedPlanRepository } from "./SyncedPlanRepository";
 
 const ACCOUNT_ID = "account-one";
@@ -12,11 +16,25 @@ const DEVICE_A = "30000000-0000-4000-8000-000000000001";
 const DEVICE_B = "30000000-0000-4000-8000-000000000002";
 
 class MemoryRemotePlanRepository implements RemotePlanRepository {
-  private readonly plans = new Map<string, PlanDocument>();
-  private readonly listeners = new Map<string, Set<(plan: PlanDocument) => void>>();
+  private readonly snapshots = new Map<string, RemotePlanSnapshot>();
+  private readonly listeners = new Map<string, Set<(snapshot: RemotePlanSnapshot) => void>>();
+  private nextPushGate: { markStarted: () => void; waitForRelease: Promise<void> } | null = null;
 
-  async load(accountId: string): Promise<PlanDocument | null> {
-    return this.plans.get(accountId) ?? null;
+  deferNextPush() {
+    let markStarted: () => void = () => undefined;
+    let release: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const waitForRelease = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.nextPushGate = { markStarted, waitForRelease };
+    return { started, release };
+  }
+
+  async load(accountId: string): Promise<RemotePlanSnapshot | null> {
+    return this.snapshots.get(accountId) ?? null;
   }
 
   async push(
@@ -24,25 +42,44 @@ class MemoryRemotePlanRepository implements RemotePlanRepository {
     plan: PlanDocument,
     expectedRemoteRevision: number,
   ): Promise<RemoteSaveResult> {
-    const remote = this.plans.get(accountId);
-    if ((remote?.revision ?? 0) !== expectedRemoteRevision) {
+    const remote = this.snapshots.get(accountId);
+    if (this.revision(remote) !== expectedRemoteRevision) {
       if (!remote) throw new Error("Missing remote conflict plan.");
       return { status: "conflict", remote };
     }
-    this.plans.set(accountId, plan);
-    this.listeners.get(accountId)?.forEach((listener) => listener(plan));
+    const gate = this.nextPushGate;
+    this.nextPushGate = null;
+    if (gate) {
+      gate.markStarted();
+      await gate.waitForRelease;
+    }
+    const snapshot = { kind: "plan", plan } as const;
+    this.snapshots.set(accountId, snapshot);
+    this.listeners.get(accountId)?.forEach((listener) => listener(snapshot));
     return { status: "saved", revision: plan.revision };
   }
 
-  subscribe(accountId: string, onRemoteChange: (plan: PlanDocument) => void): () => void {
+  subscribe(accountId: string, onRemoteChange: (snapshot: RemotePlanSnapshot) => void): () => void {
     const listeners = this.listeners.get(accountId) ?? new Set();
     listeners.add(onRemoteChange);
     this.listeners.set(accountId, listeners);
     return () => listeners.delete(onRemoteChange);
   }
 
-  async delete(accountId: string): Promise<void> {
-    this.plans.delete(accountId);
+  async delete(accountId: string, requested: RemotePlanTombstone) {
+    const revision = Math.max(requested.revision, this.revision(this.snapshots.get(accountId)) + 1);
+    const snapshot = {
+      kind: "deleted",
+      tombstone: { ...requested, revision },
+    } as const;
+    this.snapshots.set(accountId, snapshot);
+    this.listeners.get(accountId)?.forEach((listener) => listener(snapshot));
+    return { revision };
+  }
+
+  private revision(snapshot: RemotePlanSnapshot | undefined): number {
+    if (!snapshot) return 0;
+    return snapshot.kind === "plan" ? snapshot.plan.revision : snapshot.tombstone.revision;
   }
 }
 
@@ -50,12 +87,7 @@ describe("SyncedPlanRepository", () => {
   it("keeps only the latest offline plan and pushes it after reconnection", async () => {
     let online = false;
     const remote = new MemoryRemotePlanRepository();
-    const repository = new SyncedPlanRepository(
-      new MemoryPlanRepository(),
-      remote,
-      new MemorySyncStateStore(),
-      () => online,
-    );
+    const repository = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => online);
     const sample = createSamplePlan(DEVICE_A);
 
     await repository.importPlan(ACCOUNT_ID, sample);
@@ -74,25 +106,64 @@ describe("SyncedPlanRepository", () => {
       revision: 2,
     });
     await expect(remote.load(ACCOUNT_ID)).resolves.toMatchObject({
-      revision: 2,
-      updatedAt: "2026-10-01T18:00:00.000Z",
+      kind: "plan",
+      plan: { revision: 2, updatedAt: "2026-10-01T18:00:00.000Z" },
+    });
+  });
+
+  it("serializes overlapping cloud flushes without clearing a newer pending edit", async () => {
+    const remote = new MemoryRemotePlanRepository();
+    const local = new MemoryPlanRepository();
+    const repository = new SyncedPlanRepository(local, remote, () => true);
+    const seed = { ...createSamplePlan(DEVICE_A), revision: 1 };
+    await remote.push(ACCOUNT_ID, seed, 0);
+    await repository.load(ACCOUNT_ID);
+    const received = vi.fn();
+    repository.subscribe(ACCOUNT_ID, received);
+
+    const firstEdit = {
+      ...seed,
+      updatedAt: "2026-10-02T21:00:00.000Z",
+      updatedByDevice: DEVICE_A,
+    };
+    await repository.save(ACCOUNT_ID, firstEdit, 1);
+    const gate = remote.deferNextPush();
+    const firstFlush = repository.flush(ACCOUNT_ID);
+    await gate.started;
+
+    const secondEdit = {
+      ...firstEdit,
+      updatedAt: "2026-10-02T21:00:01.000Z",
+    };
+    await expect(repository.save(ACCOUNT_ID, secondEdit, 2)).resolves.toEqual({
+      status: "saved",
+      revision: 3,
+    });
+    received.mockClear();
+    const secondFlush = repository.flush(ACCOUNT_ID);
+    gate.release();
+    await expect(firstFlush).resolves.toEqual({ status: "saved", revision: 2 });
+    await expect(secondFlush).resolves.toEqual({
+      status: "saved",
+      revision: 3,
+    });
+    await Promise.resolve();
+
+    await expect(local.loadPlanSync(ACCOUNT_ID)).resolves.toMatchObject({
+      plan: { revision: 3, updatedAt: "2026-10-02T21:00:01.000Z" },
+      syncState: { remoteRevision: 3, pendingRevision: null, pendingDelete: false },
+    });
+    expect(received).not.toHaveBeenCalled();
+    await expect(remote.load(ACCOUNT_ID)).resolves.toMatchObject({
+      kind: "plan",
+      plan: { revision: 3, updatedAt: "2026-10-02T21:00:01.000Z" },
     });
   });
 
   it("returns the newer remote plan when a stale device tries to overwrite it", async () => {
     const remote = new MemoryRemotePlanRepository();
-    const first = new SyncedPlanRepository(
-      new MemoryPlanRepository(),
-      remote,
-      new MemorySyncStateStore(),
-      () => true,
-    );
-    const second = new SyncedPlanRepository(
-      new MemoryPlanRepository(),
-      remote,
-      new MemorySyncStateStore(),
-      () => true,
-    );
+    const first = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => true);
+    const second = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => true);
     const seed = { ...createSamplePlan(DEVICE_A), revision: 1 };
     await remote.push(ACCOUNT_ID, seed, 0);
     await first.load(ACCOUNT_ID);
@@ -107,13 +178,21 @@ describe("SyncedPlanRepository", () => {
       status: "saved",
       revision: 2,
     });
+    await expect(first.flush(ACCOUNT_ID)).resolves.toEqual({
+      status: "saved",
+      revision: 2,
+    });
 
     const secondEdit = {
       ...seed,
       updatedAt: "2026-10-01T19:01:00.000Z",
       updatedByDevice: DEVICE_B,
     };
-    const staleResult = await second.save(ACCOUNT_ID, secondEdit, 1);
+    await expect(second.save(ACCOUNT_ID, secondEdit, 1)).resolves.toEqual({
+      status: "saved",
+      revision: 2,
+    });
+    const staleResult = await second.flush(ACCOUNT_ID);
     expect(staleResult.status).toBe("conflict");
     if (staleResult.status === "conflict") {
       expect(staleResult.remote).toMatchObject({
@@ -122,8 +201,8 @@ describe("SyncedPlanRepository", () => {
       });
     }
     await expect(remote.load(ACCOUNT_ID)).resolves.toMatchObject({
-      revision: 2,
-      updatedByDevice: DEVICE_A,
+      kind: "plan",
+      plan: { revision: 2, updatedByDevice: DEVICE_A },
     });
   });
 
@@ -131,8 +210,7 @@ describe("SyncedPlanRepository", () => {
     let online = true;
     const remote = new MemoryRemotePlanRepository();
     const local = new MemoryPlanRepository();
-    const syncStates = new MemorySyncStateStore();
-    const repository = new SyncedPlanRepository(local, remote, syncStates, () => online);
+    const repository = new SyncedPlanRepository(local, remote, () => online);
     const seed = { ...createSamplePlan(DEVICE_A), revision: 1 };
     await remote.push(ACCOUNT_ID, seed, 0);
     await repository.load(ACCOUNT_ID);
@@ -159,21 +237,142 @@ describe("SyncedPlanRepository", () => {
     );
 
     online = true;
-    const reopened = new SyncedPlanRepository(local, remote, syncStates, () => online);
+    const reopened = new SyncedPlanRepository(local, remote, () => online);
     await expect(reopened.load(ACCOUNT_ID)).resolves.toMatchObject({
       revision: 2,
       updatedByDevice: DEVICE_B,
     });
     const conflict = new Promise<PlanDocument>((resolve) => {
-      reopened.subscribe(ACCOUNT_ID, resolve);
+      reopened.subscribe(ACCOUNT_ID, (plan) => {
+        if (plan) resolve(plan);
+      });
     });
     await expect(conflict).resolves.toMatchObject({
       revision: 2,
       updatedByDevice: DEVICE_A,
     });
     await expect(remote.load(ACCOUNT_ID)).resolves.toMatchObject({
-      revision: 2,
-      updatedByDevice: DEVICE_A,
+      kind: "plan",
+      plan: { revision: 2, updatedByDevice: DEVICE_A },
     });
+  });
+
+  it("flushes an offline deletion after reopen instead of restoring the deleted plan", async () => {
+    let online = true;
+    const remote = new MemoryRemotePlanRepository();
+    const local = new MemoryPlanRepository();
+    const repository = new SyncedPlanRepository(local, remote, () => online);
+    const seed = { ...createSamplePlan(DEVICE_A), revision: 1 };
+    await remote.push(ACCOUNT_ID, seed, 0);
+    await repository.load(ACCOUNT_ID);
+
+    online = false;
+    await repository.delete(ACCOUNT_ID);
+    await expect(local.load(ACCOUNT_ID)).resolves.toBeNull();
+    await expect(local.loadPlanSync(ACCOUNT_ID)).resolves.toMatchObject({
+      plan: null,
+      syncState: {
+        remoteRevision: 1,
+        pendingRevision: 2,
+        pendingDelete: true,
+      },
+    });
+
+    online = true;
+    const reopened = new SyncedPlanRepository(local, remote, () => online);
+    await expect(reopened.load(ACCOUNT_ID)).resolves.toBeNull();
+    await expect(remote.load(ACCOUNT_ID)).resolves.toMatchObject({
+      kind: "deleted",
+      tombstone: { revision: 2 },
+    });
+    await expect(local.loadPlanSync(ACCOUNT_ID)).resolves.toMatchObject({
+      plan: null,
+      syncState: {
+        remoteRevision: 2,
+        pendingRevision: null,
+        pendingDelete: false,
+      },
+    });
+  });
+
+  it("propagates deletion and recreates the plan above the tombstone revision", async () => {
+    const remote = new MemoryRemotePlanRepository();
+    const firstLocal = new MemoryPlanRepository();
+    const secondLocal = new MemoryPlanRepository();
+    const first = new SyncedPlanRepository(firstLocal, remote, () => true);
+    const second = new SyncedPlanRepository(secondLocal, remote, () => true);
+    const seed = { ...createSamplePlan(DEVICE_A), revision: 1 };
+    await remote.push(ACCOUNT_ID, seed, 0);
+    await first.load(ACCOUNT_ID);
+    await second.load(ACCOUNT_ID);
+
+    const deletionReceived = new Promise<void>((resolve) => {
+      second.subscribe(ACCOUNT_ID, (plan) => {
+        if (plan === null) resolve();
+      });
+    });
+    await first.delete(ACCOUNT_ID);
+    await deletionReceived;
+    await expect(secondLocal.load(ACCOUNT_ID)).resolves.toBeNull();
+
+    const recreated = createSamplePlan(DEVICE_A);
+    recreated.categories[0].goals[0].monthlyAmountCents = 333_300;
+    await first.replace(ACCOUNT_ID, recreated);
+    await expect(first.save(ACCOUNT_ID, recreated, 0)).resolves.toEqual({
+      status: "saved",
+      revision: 3,
+    });
+    await expect(first.flush(ACCOUNT_ID)).resolves.toEqual({
+      status: "saved",
+      revision: 3,
+    });
+    const remoteAfterRecreate = await remote.load(ACCOUNT_ID);
+    expect(remoteAfterRecreate?.kind).toBe("plan");
+    if (remoteAfterRecreate?.kind !== "plan") {
+      throw new Error("Expected the recreated remote snapshot to contain a plan.");
+    }
+    expect(remoteAfterRecreate.plan.revision).toBe(3);
+    expect(remoteAfterRecreate.plan.categories[0].goals[0].monthlyAmountCents).toBe(333_300);
+  });
+
+  it("prevents a stale offline device from overwriting a plan recreated after deletion", async () => {
+    let secondOnline = true;
+    const remote = new MemoryRemotePlanRepository();
+    const first = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => true);
+    const second = new SyncedPlanRepository(new MemoryPlanRepository(), remote, () => secondOnline);
+    const seed = { ...createSamplePlan(DEVICE_A), revision: 1 };
+    await remote.push(ACCOUNT_ID, seed, 0);
+    await first.load(ACCOUNT_ID);
+    await second.load(ACCOUNT_ID);
+
+    secondOnline = false;
+    await first.delete(ACCOUNT_ID);
+    const recreated = createSamplePlan(DEVICE_A);
+    recreated.categories[0].goals[0].monthlyAmountCents = 333_300;
+    await first.replace(ACCOUNT_ID, recreated);
+    await first.save(ACCOUNT_ID, recreated, 0);
+    await first.flush(ACCOUNT_ID);
+
+    const stale = {
+      ...seed,
+      updatedAt: "2026-10-02T20:00:00.000Z",
+      updatedByDevice: DEVICE_B,
+    };
+    await expect(second.save(ACCOUNT_ID, stale, 1)).resolves.toEqual({
+      status: "saved",
+      revision: 2,
+    });
+    secondOnline = true;
+    await expect(second.flush(ACCOUNT_ID)).resolves.toMatchObject({
+      status: "conflict",
+      remote: { revision: 3 },
+    });
+    const remoteAfterStaleFlush = await remote.load(ACCOUNT_ID);
+    expect(remoteAfterStaleFlush?.kind).toBe("plan");
+    if (remoteAfterStaleFlush?.kind !== "plan") {
+      throw new Error("Expected the recreated remote snapshot to remain a plan.");
+    }
+    expect(remoteAfterStaleFlush.plan.revision).toBe(3);
+    expect(remoteAfterStaleFlush.plan.categories[0].goals[0].monthlyAmountCents).toBe(333_300);
   });
 });

@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { StrictMode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerSW } from "virtual:pwa-register";
 
 import { MemoryPlanRepository } from "../adapters/local/MemoryPlanRepository";
 import { createSamplePlan } from "../application/samplePlan";
@@ -8,12 +10,57 @@ import type { PlanDocument } from "../domain/plan";
 import { updateGoal } from "../domain/plan";
 import type { Account, AuthProvider } from "../ports/AuthProvider";
 import type { CloudRuntime } from "../ports/CloudRuntime";
-import type { RemotePlanRepository, RemoteSaveResult } from "../ports/RemotePlanRepository";
+import type {
+  RemotePlanRepository,
+  RemotePlanSnapshot,
+  RemotePlanTombstone,
+  RemoteSaveResult,
+} from "../ports/RemotePlanRepository";
 import { App } from "./App";
 
 const DEVICE_ID = "30000000-0000-4000-8000-000000000001";
 const OTHER_DEVICE_ID = "30000000-0000-4000-8000-000000000002";
 const ACCOUNT: Account = { id: "user-one", displayName: null, email: "planner@example.com" };
+const SECOND_ACCOUNT: Account = {
+  id: "user-two",
+  displayName: null,
+  email: "second-planner@example.com",
+};
+
+vi.mock("virtual:pwa-register", () => ({ registerSW: vi.fn() }));
+
+type RegisterOptions = NonNullable<Parameters<typeof registerSW>[0]>;
+
+const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
+const registerSWMock = vi.mocked(registerSW);
+let registerOptions: RegisterOptions | undefined;
+let updateServiceWorker: ReturnType<typeof vi.fn<() => Promise<void>>>;
+
+function requireRegisterOptions(): RegisterOptions {
+  if (!registerOptions) throw new Error("PWA registration options were not captured.");
+  return registerOptions;
+}
+
+beforeEach(() => {
+  registerOptions = undefined;
+  updateServiceWorker = vi.fn(async () => undefined);
+  registerSWMock.mockImplementation((options) => {
+    registerOptions = options;
+    return updateServiceWorker;
+  });
+  Object.defineProperty(navigator, "serviceWorker", {
+    configurable: true,
+    value: {},
+  });
+});
+
+afterEach(() => {
+  if (originalServiceWorker) {
+    Object.defineProperty(navigator, "serviceWorker", originalServiceWorker);
+  } else {
+    Reflect.deleteProperty(navigator, "serviceWorker");
+  }
+});
 
 class FakeAuthProvider implements AuthProvider {
   private readonly listeners = new Set<(account: Account | null) => void>();
@@ -46,6 +93,10 @@ class FakeAuthProvider implements AuthProvider {
     return () => this.listeners.delete(listener);
   }
 
+  switchAccount(account: Account | null) {
+    this.setAccount(account);
+  }
+
   private setAccount(account: Account | null) {
     this.account = account;
     this.listeners.forEach((listener) => listener(account));
@@ -53,11 +104,12 @@ class FakeAuthProvider implements AuthProvider {
 }
 
 class FakeRemotePlanRepository implements RemotePlanRepository {
-  private readonly plans = new Map<string, PlanDocument>();
-  private readonly listeners = new Map<string, Set<(plan: PlanDocument) => void>>();
+  private readonly snapshots = new Map<string, RemotePlanSnapshot>();
+  private readonly listeners = new Map<string, Set<(snapshot: RemotePlanSnapshot) => void>>();
+  pushCount = 0;
 
-  async load(accountId: string): Promise<PlanDocument | null> {
-    return this.plans.get(accountId) ?? null;
+  async load(accountId: string): Promise<RemotePlanSnapshot | null> {
+    return this.snapshots.get(accountId) ?? null;
   }
 
   async push(
@@ -65,8 +117,11 @@ class FakeRemotePlanRepository implements RemotePlanRepository {
     plan: PlanDocument,
     expectedRemoteRevision: number,
   ): Promise<RemoteSaveResult> {
-    const remote = this.plans.get(accountId);
-    if ((remote?.revision ?? 0) !== expectedRemoteRevision) {
+    this.pushCount += 1;
+    const remote = this.snapshots.get(accountId);
+    const remoteRevision =
+      remote?.kind === "plan" ? remote.plan.revision : (remote?.tombstone.revision ?? 0);
+    if (remoteRevision !== expectedRemoteRevision) {
       if (!remote) throw new Error("Missing conflict plan.");
       return { status: "conflict", remote };
     }
@@ -74,20 +129,28 @@ class FakeRemotePlanRepository implements RemotePlanRepository {
     return { status: "saved", revision: plan.revision };
   }
 
-  subscribe(accountId: string, onRemoteChange: (plan: PlanDocument) => void): () => void {
+  subscribe(accountId: string, onRemoteChange: (snapshot: RemotePlanSnapshot) => void): () => void {
     const listeners = this.listeners.get(accountId) ?? new Set();
     listeners.add(onRemoteChange);
     this.listeners.set(accountId, listeners);
     return () => listeners.delete(onRemoteChange);
   }
 
-  async delete(accountId: string): Promise<void> {
-    this.plans.delete(accountId);
+  async delete(accountId: string, tombstone: RemotePlanTombstone) {
+    const current = this.snapshots.get(accountId);
+    const currentRevision =
+      current?.kind === "plan" ? current.plan.revision : (current?.tombstone.revision ?? 0);
+    const saved = { ...tombstone, revision: Math.max(tombstone.revision, currentRevision + 1) };
+    const snapshot = { kind: "deleted", tombstone: saved } as const;
+    this.snapshots.set(accountId, snapshot);
+    this.listeners.get(accountId)?.forEach((listener) => listener(snapshot));
+    return { revision: saved.revision };
   }
 
   seed(accountId: string, plan: PlanDocument) {
-    this.plans.set(accountId, plan);
-    this.listeners.get(accountId)?.forEach((listener) => listener(plan));
+    const snapshot = { kind: "plan", plan } as const;
+    this.snapshots.set(accountId, snapshot);
+    this.listeners.get(accountId)?.forEach((listener) => listener(snapshot));
   }
 }
 
@@ -106,6 +169,19 @@ async function renderPlanner() {
 }
 
 describe("local-first planner", () => {
+  it("finishes its immediate local save when development StrictMode replays effects", async () => {
+    const repository = new MemoryPlanRepository();
+
+    render(
+      <StrictMode>
+        <App repository={repository} deviceId={DEVICE_ID} />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
+    await expect(repository.load("anonymous-local")).resolves.toMatchObject({ revision: 1 });
+  });
+
   it("renders the accepted pinned home with a 50-goal sample plan", async () => {
     await renderPlanner();
 
@@ -202,7 +278,10 @@ describe("local-first planner", () => {
     await user.click(screen.getByRole("button", { name: "导入本机计划" }));
     await screen.findByRole("heading", { name: "已置顶" });
 
-    await expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({ planId: anonymousPlan.planId });
+    await expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({
+      kind: "plan",
+      plan: { planId: anonymousPlan.planId },
+    });
     await expect(repository.load("anonymous-local")).resolves.toBeNull();
   });
 
@@ -247,6 +326,24 @@ describe("local-first planner", () => {
     await expect(plans.load(ACCOUNT.id)).resolves.toBeNull();
   });
 
+  it("debounces rapid plan changes into one remote transaction", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    await screen.findByRole("heading", { name: "已置顶" });
+    await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: /CA · Single/ }));
+    const slider = screen.getByRole("slider");
+    fireEvent.change(slider, { target: { value: "600" } });
+    fireEvent.change(slider, { target: { value: "700" } });
+    fireEvent.change(slider, { target: { value: "800" } });
+
+    await waitFor(() => expect(plans.pushCount).toBe(1));
+    expect(slider).toHaveValue("800");
+  });
+
   it("clears the authenticated cache on sign-out without deleting the cloud plan", async () => {
     const repository = new MemoryPlanRepository();
     const { runtime, plans } = createCloudRuntime();
@@ -261,7 +358,10 @@ describe("local-first planner", () => {
     await screen.findByRole("button", { name: /跨设备同步/ });
 
     await expect(repository.load(ACCOUNT.id)).resolves.toBeNull();
-    await expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 1 });
+    await expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({
+      kind: "plan",
+      plan: { revision: 1 },
+    });
   });
 
   it("shows a two-device revision conflict and can keep the current local edit", async () => {
@@ -278,7 +378,12 @@ describe("local-first planner", () => {
     await user.type(amount, "4100");
     await user.tab();
     expect(amount).toHaveValue(4100);
-    await waitFor(() => expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 2 }));
+    await waitFor(() =>
+      expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({
+        kind: "plan",
+        plan: { revision: 2 },
+      }),
+    );
     const refreshedAmount = screen.getByRole("spinbutton", { name: "房租每月金额" });
     fireEvent.change(refreshedAmount, { target: { value: "4200" } });
     fireEvent.blur(refreshedAmount);
@@ -295,9 +400,87 @@ describe("local-first planner", () => {
     expect(await screen.findByText("检测到另一份较新的计划版本")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "保留当前修改" }));
     await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
+    await waitFor(() =>
+      expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({
+        kind: "plan",
+        plan: { revision: 4, updatedByDevice: DEVICE_ID },
+      }),
+    );
+  });
+
+  it("keeps a locally committed edit when a PWA update unmounts inside the cloud debounce", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    const { unmount } = render(
+      <App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />,
+    );
+    const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
+    fireEvent.change(amount, { target: { value: "4321" } });
+    fireEvent.blur(amount);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const localBeforeUpdate = await repository.loadPlanSync(ACCOUNT.id);
+    expect(localBeforeUpdate.plan?.revision).toBe(2);
+    expect(localBeforeUpdate.plan?.categories[0].goals[0].monthlyAmountCents).toBe(432_100);
+    expect(localBeforeUpdate.syncState).toMatchObject({ remoteRevision: 1, pendingRevision: 2 });
+    expect(plans.pushCount).toBe(0);
+
+    act(() => requireRegisterOptions().onNeedRefresh?.());
+    fireEvent.click(screen.getByRole("button", { name: "立即更新" }));
+    expect(updateServiceWorker).toHaveBeenCalledWith(true);
+    unmount();
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({
-      revision: 4,
-      updatedByDevice: DEVICE_ID,
+      kind: "plan",
+      plan: { revision: 1 },
+    });
+    const persisted = await repository.loadPlanSync(ACCOUNT.id);
+    expect(persisted.plan?.revision).toBe(2);
+    expect(persisted.plan?.categories[0].goals[0].monthlyAmountCents).toBe(432_100);
+    expect(persisted.syncState).toMatchObject({ remoteRevision: 1, pendingRevision: 2 });
+  });
+
+  it("keeps a pending edit scoped to its account when the authenticated session switches", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    const secondPlan = { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 };
+    secondPlan.categories[0].goals[0].monthlyAmountCents = 555_500;
+    plans.seed(SECOND_ACCOUNT.id, secondPlan);
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
+    fireEvent.change(amount, { target: { value: "4444" } });
+    fireEvent.blur(amount);
+    await waitFor(async () => {
+      const snapshot = await repository.loadPlanSync(ACCOUNT.id);
+      expect(snapshot.plan?.revision).toBe(2);
+      expect(snapshot.plan?.categories[0].goals[0].monthlyAmountCents).toBe(444_400);
+      expect(snapshot.syncState).toMatchObject({ remoteRevision: 1, pendingRevision: 2 });
+    });
+    expect(plans.pushCount).toBe(0);
+
+    act(() => auth.switchAccount(SECOND_ACCOUNT));
+    await waitFor(() =>
+      expect(screen.getByRole("spinbutton", { name: "房租每月金额" })).toHaveValue(5555),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const firstAccount = await repository.loadPlanSync(ACCOUNT.id);
+    expect(firstAccount.plan?.revision).toBe(2);
+    expect(firstAccount.plan?.categories[0].goals[0].monthlyAmountCents).toBe(444_400);
+    expect(firstAccount.syncState).toMatchObject({ remoteRevision: 1, pendingRevision: 2 });
+    await expect(plans.load(ACCOUNT.id)).resolves.toMatchObject({
+      kind: "plan",
+      plan: { revision: 1 },
     });
   });
 });

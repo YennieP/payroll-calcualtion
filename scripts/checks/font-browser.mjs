@@ -83,6 +83,14 @@ preview.stdout.on("data", (chunk) => {
 preview.stderr.on("data", (chunk) => {
   previewOutput += chunk.toString();
 });
+let previewStopped = false;
+async function stopPreview() {
+  if (previewStopped) return;
+  previewStopped = true;
+  if (preview.exitCode !== null || preview.signalCode !== null) return;
+  preview.kill("SIGTERM");
+  await new Promise((resolve) => preview.once("exit", resolve));
+}
 
 const fixtureUrl = `http://127.0.0.1:${port}/payroll-calcualtion/?font-audit=1`;
 let browser;
@@ -168,11 +176,6 @@ try {
       `Expected at least ${expectedCachedFontCount} cached WOFF2 files, found ${cachedFontCount}.`,
     );
   }
-
-  await context.setOffline(true);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.locator('[data-font-audit="passed"]').waitFor({ timeout: 30_000 });
-  await context.setOffline(false);
 
   mkdirSync(join(root, "test-results"), { recursive: true });
   await page.screenshot({
@@ -436,8 +439,55 @@ try {
     fullPage: false,
   });
 
+  await page.goto(fixtureUrl, { waitUntil: "networkidle" });
+  await page.locator('[data-font-audit="passed"]').waitFor({ timeout: 60_000 });
   if (failedRequests.length > 0) {
-    throw new Error(`Font fixture had failed requests:\n${failedRequests.join("\n")}`);
+    throw new Error(`Online font fixture had failed requests:\n${failedRequests.join("\n")}`);
+  }
+  failedRequests.length = 0;
+  await stopPreview();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  try {
+    await page.locator('[data-font-audit="passed"]').waitFor({ timeout: 60_000 });
+  } catch {
+    const auditStatus = await page.locator("[data-font-audit]").getAttribute("data-font-audit");
+    const failures = await page.locator(".font-audit-failures li").allTextContents();
+    const diagnostics = await page.evaluate(async () => {
+      const shorthand = 'normal 400 32px "Bodoni Moda"';
+      let loadResult;
+      try {
+        const faces = await document.fonts.load(shorthand, "Worthwhile California 0123456789");
+        loadResult = `resolved:${faces.length}`;
+      } catch (error) {
+        loadResult = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      }
+      return {
+        fontLinks: document.querySelectorAll("link[data-font-family]").length,
+        fontSetSize: document.fonts.size,
+        bodoniFaces: [...document.fonts]
+          .filter((face) => face.family === "Bodoni Moda")
+          .map((face) => ({
+            status: face.status,
+            style: face.style,
+            weight: face.weight,
+            unicodeRange: face.unicodeRange,
+          })),
+        check: document.fonts.check(shorthand, "Worthwhile California 0123456789"),
+        loadResult,
+      };
+    });
+    throw new Error(
+      `Font audit did not survive a serverless reopen (status: ${auditStatus ?? "missing"}).\n${JSON.stringify(diagnostics)}\n${failures.join("\n")}`,
+    );
+  }
+
+  const unexpectedOfflineFailures = failedRequests.filter(
+    (url) => !/\/fonts\/.*\.woff2$/.test(new URL(url).pathname),
+  );
+  if (unexpectedOfflineFailures.length > 0) {
+    throw new Error(
+      `Serverless font fixture had unexpected failed requests:\n${unexpectedOfflineFailures.join("\n")}`,
+    );
   }
 
   console.log(
@@ -449,5 +499,5 @@ try {
   process.exitCode = 1;
 } finally {
   await browser?.close();
-  preview.kill("SIGTERM");
+  await stopPreview();
 }

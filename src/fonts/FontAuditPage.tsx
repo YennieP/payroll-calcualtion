@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { THEME_OPTIONS } from "../features/planner/themeOptions";
 import { usePwaLifecycle } from "../pwa/usePwaLifecycle";
-import { loadAllFonts, type FontAuditFailure } from "./fontLoader";
+import { cacheAllFontAssets, loadAllFonts, type FontAuditFailure } from "./fontLoader";
 import {
   COMMON_CHINESE_FONT_SAMPLE,
   THEME_TYPOGRAPHY,
@@ -15,17 +15,21 @@ export function FontAuditPage() {
   usePwaLifecycle();
   const [status, setStatus] = useState<AuditStatus>("loading");
   const [failures, setFailures] = useState<readonly FontAuditFailure[]>([]);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    loadAllFonts()
-      .then((result) => {
+    Promise.all([loadAllFonts(), cacheAllFontAssets()])
+      .then(([result]) => {
         if (cancelled) return;
         setFailures(result.failures);
         setStatus(result.failures.length === 0 ? "passed" : "failed");
       })
-      .catch(() => {
-        if (!cancelled) setStatus("failed");
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setAuditError(error instanceof Error ? error.message : "Unknown font audit failure.");
+          setStatus("failed");
+        }
       });
     return () => {
       cancelled = true;
@@ -83,6 +87,7 @@ export function FontAuditPage() {
           ))}
         </ul>
       ) : null}
+      {auditError ? <p data-font-audit-error>{auditError}</p> : null}
     </main>
   );
 }

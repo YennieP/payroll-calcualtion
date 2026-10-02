@@ -28,13 +28,28 @@ service cloud.firestore {
         && request.resource.data.categories is list;
     }
 
+    function hasValidTombstoneShape() {
+      return request.resource.data.keys().hasOnly([
+          'kind',
+          'revision',
+          'deletedAt'
+        ])
+        && request.resource.data.kind == 'deleted'
+        && request.resource.data.revision is int
+        && request.resource.data.revision > 0
+        && request.resource.data.deletedAt is string;
+    }
+
+    function hasValidRemoteShape() {
+      return hasValidPlanShape() || hasValidTombstoneShape();
+    }
+
     match /plans/{userId} {
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && hasValidPlanShape();
+      allow create: if isOwner(userId) && hasValidRemoteShape();
       allow update: if isOwner(userId)
-        && hasValidPlanShape()
+        && hasValidRemoteShape()
         && request.resource.data.revision > resource.data.revision;
-      allow delete: if isOwner(userId);
     }
 
     match /{document=**} {

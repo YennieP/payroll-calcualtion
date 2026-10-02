@@ -164,7 +164,7 @@ try {
   const storedPlanCount = await page.evaluate(
     () =>
       new Promise((resolve, reject) => {
-        const openRequest = indexedDB.open("worthwhile-plans", 1);
+        const openRequest = indexedDB.open("worthwhile-plans");
         openRequest.onerror = () => reject(openRequest.error);
         openRequest.onsuccess = () => {
           const database = openRequest.result;

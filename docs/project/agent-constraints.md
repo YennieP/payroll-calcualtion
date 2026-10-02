@@ -71,6 +71,7 @@ After a material work unit, update `implementation-plan.md`:
 - Add newly discovered blockers rather than hiding them in prose.
 - Keep the next executable step explicit.
 - Do not delete prior update-log entries; correct them with a new dated entry.
+- During a cross-phase stabilization backlog, finish only one review unit at a time. After its implementation and focused checks, inspect the latest repository state against every unresolved backlog item before starting another unit. Record any changed dependency, priority, scope, acceptance criterion, or test plan in both language sections and the update log.
 
 ## 7. Handoff requirements
 

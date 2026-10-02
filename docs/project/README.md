@@ -8,6 +8,9 @@ This directory is the durable source of truth for the California Lifestyle Incom
 2. [`agent-constraints.md`](agent-constraints.md) — rules for agents changing this repository.
 3. [`implementation-plan.md`](implementation-plan.md) — current phase, deliverables, exit criteria, and update log.
 
+Phase 7 的固定浏览器矩阵、前端资源预算、隐私日志边界和 Firebase Spark 容量模型记录在
+[`quality-security-performance.md`](quality-security-performance.md)。
+
 The repository root [`AGENTS.md`](../../AGENTS.md) is the entry point for agents and makes this reading order mandatory.
 
 ## Current decision snapshot
@@ -22,6 +25,7 @@ The repository root [`AGENTS.md`](../../AGENTS.md) is the entry point for agents
 - Visual baseline: the user-approved browser-width responsive three-column layout with pinned home, category view, persistent income panel, and seven themes; panels stack at 900 px and below.
 - Typography: the final eleven-family theme mapping in `development-constraints.md` and its required glyph coverage must be preserved; Blue Midnight numbers use DM Serif Display.
 - Tax scope: California W-2 planning estimate with supported filing statuses and explicit rule-year metadata.
+- Active milestone: Phase 7.1 cross-phase stabilization. Phase 8 release work is blocked until its data-integrity, offline/PWA, validation, and regression items pass.
 
 ## Document update policy
 
@@ -31,3 +35,4 @@ The repository root [`AGENTS.md`](../../AGENTS.md) is the entry point for agents
 - Add a dated entry to its update log; do not rewrite history silently.
 - If a decision changes a non-negotiable constraint, update both the relevant document and root `AGENTS.md`.
 - When code and documentation disagree, stop and resolve the discrepancy before continuing dependent work.
+- During Phase 7.1, completing one backlog item triggers a fresh review of the latest repository against every unresolved item. Update dependencies, priority, scope, and tests in the bilingual implementation plan before starting the next item whenever that review changes the plan.

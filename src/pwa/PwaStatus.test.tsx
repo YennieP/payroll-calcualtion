@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PwaStatusView } from "./PwaStatus";
 
 describe("PWA status notice", () => {
-  it("waits for local persistence before applying an update", async () => {
+  it("allows an update after local persistence without waiting for cloud flush", async () => {
     const update = vi.fn(async () => undefined);
     const user = userEvent.setup();
     const props = {

@@ -301,6 +301,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             plan: { ...state.plan, revision: state.conflictingPlan.revision },
             conflictingPlan: null,
             saveStatus: "local-change",
+            editSequence: state.editSequence + 1,
           }
         : state;
   }

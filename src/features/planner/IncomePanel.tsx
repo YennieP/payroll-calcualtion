@@ -25,7 +25,7 @@ export function IncomePanel({ state, dispatch }: IncomePanelProps) {
       <p>建议税前年薪</p>
       <strong>{formatMoney(projection.annualRequiredGrossCents)}</strong>
       <small>{formatMoney(projection.monthlyRequiredGrossCents)} / 月税前</small>
-      <div className="income-meter" aria-label="收入中税后可用和预计税费的比例">
+      <div className="income-meter" role="img" aria-label="收入中税后可用和预计税费的比例">
         <i style={{ width: `${usableRatio * 100}%` }} />
         <i style={{ width: `${taxRatio * 100}%` }} />
       </div>

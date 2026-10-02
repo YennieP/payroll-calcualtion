@@ -10,10 +10,26 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["icons/app-icon.svg", "icons/app-icon-192.png", "icons/app-icon-512.png"],
+      includeAssets: [
+        "icons/app-icon.svg",
+        "icons/app-icon-192.png",
+        "icons/app-icon-512.png",
+        "fonts/asset-manifest.json",
+      ],
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,woff2,webmanifest}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,json,webmanifest}"],
+        globIgnores: ["fonts/**"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: /\/fonts\/.*\.(?:css|woff2)$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "worthwhile-fonts-v1",
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       manifest: {
         name: "Worthwhile · California Income Planner",

@@ -31,6 +31,7 @@ if (actualDirectories.join("\n") !== expectedDirectories.join("\n")) {
 }
 
 let totalWoff2Files = 0;
+const expectedCachedAssets = [];
 for (const [directory, family] of Object.entries(expected)) {
   const familyRoot = join(fontRoot, directory);
   const stylesheetPath = join(familyRoot, "font.css");
@@ -59,6 +60,10 @@ for (const [directory, family] of Object.entries(expected)) {
     ),
   ].sort();
   totalWoff2Files += woff2Files.length;
+  expectedCachedAssets.push(
+    `${directory}/font.css`,
+    ...woff2Files.map((file) => `${directory}/${file}`),
+  );
 
   if (woff2Files.length === 0) failures.push(`${directory} has no WOFF2 files`);
   if (woff2Files.join("\n") !== references.join("\n")) {
@@ -68,6 +73,22 @@ for (const [directory, family] of Object.entries(expected)) {
     if (!existsSync(join(familyRoot, reference))) {
       failures.push(`${directory}/font.css references missing ${reference}`);
     }
+  }
+}
+
+const assetManifestPath = join(fontRoot, "asset-manifest.json");
+if (!existsSync(assetManifestPath)) {
+  failures.push("font asset-manifest.json is missing");
+} else {
+  const assetManifest = JSON.parse(readFileSync(assetManifestPath, "utf8"));
+  const actualCachedAssets = Array.isArray(assetManifest.assets)
+    ? [...assetManifest.assets].sort()
+    : [];
+  if (
+    assetManifest.version !== 1 ||
+    actualCachedAssets.join("\n") !== expectedCachedAssets.sort().join("\n")
+  ) {
+    failures.push("font asset-manifest.json does not match the accepted CSS and WOFF2 assets");
   }
 }
 

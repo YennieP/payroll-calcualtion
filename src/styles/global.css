@@ -1105,8 +1105,13 @@ button:disabled {
 }
 
 .planner-nav > button.is-active {
+  color: var(--nav-ink);
   background: color-mix(in srgb, var(--accent) 18%, var(--nav));
   box-shadow: inset 3px 0 0 var(--accent2);
+}
+
+.planner-nav > button.is-active small {
+  color: color-mix(in srgb, var(--nav-ink) 85%, var(--nav));
 }
 
 .planner-nav > button > b {

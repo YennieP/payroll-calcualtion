@@ -27,10 +27,12 @@ const steps = [
 if (requestedMode === "full") {
   steps.push(
     ["Production build", npmCommand, ["run", "build"]],
+    ["Quality and privacy budgets", npmCommand, ["run", "quality:check"]],
     ["Architecture boundaries", process.execPath, ["scripts/checks/architecture-boundaries.mjs"]],
     ["PWA artifacts", process.execPath, ["scripts/checks/pwa-artifacts.mjs"]],
     ["PWA offline browser", npmCommand, ["run", "test:pwa:browser"]],
     ["Browser font audit", npmCommand, ["run", "test:fonts:browser"]],
+    ["Extreme-content and accessibility browser", npmCommand, ["run", "test:quality:browser"]],
     ["Firebase Emulator", npmCommand, ["run", "test:firebase:emulator"]],
     ["Project documents", process.execPath, ["scripts/checks/project-docs.mjs"]],
   );

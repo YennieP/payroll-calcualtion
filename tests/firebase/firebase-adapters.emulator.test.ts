@@ -51,7 +51,10 @@ describe("Firebase adapters across independent contexts", () => {
       status: "saved",
       revision: 1,
     });
-    await expect(phone.plans.load(account.id)).resolves.toMatchObject({ revision: 1 });
+    await expect(phone.plans.load(account.id)).resolves.toMatchObject({
+      kind: "plan",
+      plan: { revision: 1 },
+    });
 
     const second = {
       ...first,
@@ -66,9 +69,48 @@ describe("Firebase adapters across independent contexts", () => {
     await expect(phone.plans.push(account.id, { ...first, revision: 2 }, 1)).resolves.toMatchObject(
       {
         status: "conflict",
-        remote: { revision: 2 },
+        remote: { kind: "plan", plan: { revision: 2 } },
       },
     );
+
+    const deletionReceived = new Promise<void>((resolve, reject) => {
+      let unsubscribe = () => {};
+      unsubscribe = phone.plans.subscribe(
+        account.id,
+        (snapshot) => {
+          if (snapshot.kind !== "deleted") return;
+          unsubscribe();
+          resolve();
+        },
+        reject,
+      );
+    });
+    await expect(
+      desktop.plans.delete(account.id, {
+        kind: "deleted",
+        revision: 3,
+        deletedAt: "2026-10-02T20:03:00.000Z",
+      }),
+    ).resolves.toEqual({ revision: 3 });
+    await deletionReceived;
+    await expect(phone.plans.load(account.id)).resolves.toMatchObject({
+      kind: "deleted",
+      tombstone: { revision: 3 },
+    });
+
+    const recreated = {
+      ...first,
+      revision: 4,
+      updatedAt: "2026-10-02T20:04:00.000Z",
+    };
+    await expect(desktop.plans.push(account.id, recreated, 3)).resolves.toEqual({
+      status: "saved",
+      revision: 4,
+    });
+    await expect(phone.plans.load(account.id)).resolves.toMatchObject({
+      kind: "plan",
+      plan: { revision: 4 },
+    });
 
     await outsider.auth.registerWithEmail("outsider@example.test", password);
     await expect(outsider.plans.load(account.id)).rejects.toMatchObject({

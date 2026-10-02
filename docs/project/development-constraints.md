@@ -39,7 +39,7 @@ The MVP must work on phones and desktop computers, synchronize data between them
 - Support email/password authentication and password reset; Google sign-in may be added within MVP if configuration remains low-cost.
 - Offer to import a local plan when a user first signs in.
 - Synchronize the same account's plan between phone and desktop.
-- Save locally first, then debounce cloud writes or save on field blur.
+- Persist every edit locally immediately, then debounce only cloud flushes. Serialize cloud flushes per account without blocking local commits. A cloud acknowledgement may clear only the exact pending revision it uploaded; it must preserve any newer local pending revision.
 - Expose concise states for local changes, syncing, saved, offline, failed, and conflict.
 - Use optimistic concurrency with `revision`, `updatedAt`, and `updatedByDevice`.
 - Never silently overwrite a newer remote revision.
@@ -54,7 +54,7 @@ The MVP must work on phones and desktop computers, synchronize data between them
 - Keep the tax engine and plan-domain logic framework-independent and deterministic.
 - Keep Firebase SDK imports inside `src/adapters/firebase/` and bootstrap configuration.
 - Access persistence and authentication through interfaces defined under `src/ports/`.
-- Use IndexedDB behind a local repository adapter for the canonical local cache and pending sync document.
+- Use IndexedDB behind a local repository adapter for the canonical local cache and pending sync document. Store each account's plan and sync metadata in the same atomic record/transaction; preserve the one-time migration path from the legacy split sync database.
 - Keep derived totals and tax results out of persistent storage; recompute them from source inputs.
 - Use one plan document per user for the MVP. Do not introduce Firestore subcollections without a demonstrated need.
 - Use integer cents for money and basis points for percentages in the domain model.

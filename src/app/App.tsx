@@ -3,8 +3,6 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { LocalPlanRepository } from "../adapters/local/LocalPlanRepository";
 import { MemoryPlanRepository } from "../adapters/local/MemoryPlanRepository";
 import { BrowserDeviceIdentity } from "../adapters/local/BrowserDeviceIdentity";
-import { LocalSyncStateStore } from "../adapters/local/LocalSyncStateStore";
-import { MemorySyncStateStore } from "../adapters/local/MemorySyncStateStore";
 import { createSamplePlan } from "../application/samplePlan";
 import { importPlanJson } from "../application/planTransfer";
 import {
@@ -16,15 +14,16 @@ import { AccountControl } from "../features/auth/AccountControl";
 import { Planner } from "../features/planner/Planner";
 import type { Account, AuthProvider } from "../ports/AuthProvider";
 import type { CloudRuntime } from "../ports/CloudRuntime";
+import type { LocalPlanSyncRepository } from "../ports/LocalPlanSyncRepository";
 import type { PlanRepository } from "../ports/PlanRepository";
-import type { SyncStateStore } from "../ports/SyncStateStore";
 import { appReducer, createInitialAppState } from "./appReducer";
 import { loadFirebaseRuntime } from "./firebaseBootstrap";
 
 const LOCAL_ACCOUNT_ID = "anonymous-local";
+const CLOUD_FLUSH_DEBOUNCE_MS = 250;
 
 export interface AppProps {
-  repository?: PlanRepository;
+  repository?: LocalPlanSyncRepository;
   deviceId?: string;
   cloudRuntime?: CloudRuntime | null;
 }
@@ -67,16 +66,10 @@ function createUuid(): string {
   return `40000000-0000-4000-8000-${tail}`;
 }
 
-function createDefaultRepository(): PlanRepository {
+function createDefaultRepository(): LocalPlanSyncRepository {
   return globalThis.indexedDB
     ? new LocalPlanRepository(globalThis.indexedDB)
     : new MemoryPlanRepository();
-}
-
-function createDefaultSyncStateStore(): SyncStateStore {
-  return globalThis.indexedDB
-    ? new LocalSyncStateStore(globalThis.indexedDB)
-    : new MemorySyncStateStore();
 }
 
 function createPersistentDeviceId(): string {
@@ -104,11 +97,31 @@ function PlannerSession({
   );
   const [isOnline, setIsOnline] = useState(() => globalThis.navigator?.onLine ?? true);
   const loadStarted = useRef(false);
+  const active = useRef(true);
+  const cloudFlushTimer = useRef<number | null>(null);
+  const localSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const lastQueuedEditSequence = useRef(-1);
+  const persistedRevision = useRef(0);
 
   const createMetadata = useCallback(
     () => ({ updatedAt: new Date().toISOString(), updatedByDevice: deviceId }),
     [deviceId],
   );
+
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      if (cloudFlushTimer.current !== null) {
+        globalThis.clearTimeout(cloudFlushTimer.current);
+        cloudFlushTimer.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state.saveStatus === "saved") persistedRevision.current = state.plan.revision;
+  }, [state.plan.revision, state.saveStatus]);
 
   useEffect(() => {
     if (loadStarted.current) return;
@@ -150,40 +163,92 @@ function PlannerSession({
   useEffect(
     () =>
       repository.subscribe(accountId, (remote) => {
-        dispatch({ type: "remote-received", remote });
+        dispatch(
+          remote
+            ? { type: "remote-received", remote }
+            : { type: "plan-deleted", replacement: createSamplePlan(deviceId) },
+        );
       }),
-    [accountId, repository],
+    [accountId, deviceId, repository],
   );
 
+  const flushCloud = useCallback(async () => {
+    if (!(repository instanceof SyncedPlanRepository)) return;
+    const result = await repository.flush(accountId);
+    if (!active.current) return;
+    if (result.status === "conflict") {
+      dispatch({ type: "save-conflicted", remote: result.remote });
+    } else if (result.status === "deleted") {
+      dispatch({ type: "plan-deleted", replacement: createSamplePlan(deviceId) });
+    }
+  }, [accountId, deviceId, repository]);
+
+  const scheduleCloudFlush = useCallback(() => {
+    if (!(repository instanceof SyncedPlanRepository)) return;
+    if (cloudFlushTimer.current !== null) globalThis.clearTimeout(cloudFlushTimer.current);
+    cloudFlushTimer.current = globalThis.setTimeout(() => {
+      cloudFlushTimer.current = null;
+      void flushCloud();
+    }, CLOUD_FLUSH_DEBOUNCE_MS);
+  }, [flushCloud, repository]);
+
   useEffect(() => {
-    if (state.saveStatus !== "local-change") return;
+    if (
+      state.saveStatus !== "local-change" ||
+      state.editSequence <= lastQueuedEditSequence.current
+    ) {
+      return;
+    }
     const snapshot = state.plan;
     const editSequence = state.editSequence;
-    const timer = globalThis.setTimeout(() => {
-      dispatch({ type: "save-started" });
-      repository
-        .save(accountId, snapshot, snapshot.revision)
-        .then((result) => {
-          if (result.status === "saved") {
-            dispatch({ type: "plan-saved", revision: result.revision, editSequence });
-          } else {
-            dispatch({ type: "save-conflicted", remote: result.remote });
-          }
-        })
-        .catch((error: unknown) =>
-          dispatch({
-            type: "storage-failed",
-            message: error instanceof Error ? error.message : "未知 IndexedDB 错误。",
-          }),
+    lastQueuedEditSequence.current = editSequence;
+    dispatch({ type: "save-started" });
+
+    localSaveQueue.current = localSaveQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        const expectedRevision = Math.max(snapshot.revision, persistedRevision.current);
+        const result = await repository.save(
+          accountId,
+          { ...snapshot, revision: expectedRevision },
+          expectedRevision,
         );
-    }, 250);
-    return () => globalThis.clearTimeout(timer);
-  }, [accountId, repository, state.editSequence, state.plan, state.saveStatus]);
+        if (result.status === "saved") persistedRevision.current = result.revision;
+        if (!active.current) return;
+        if (result.status === "saved") {
+          dispatch({ type: "plan-saved", revision: result.revision, editSequence });
+          scheduleCloudFlush();
+        } else if (result.status === "conflict") {
+          dispatch({ type: "save-conflicted", remote: result.remote });
+        } else {
+          dispatch({ type: "plan-deleted", replacement: createSamplePlan(deviceId) });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!active.current) return;
+        dispatch({
+          type: "storage-failed",
+          message: error instanceof Error ? error.message : "未知 IndexedDB 错误。",
+        });
+      });
+  }, [
+    accountId,
+    deviceId,
+    repository,
+    scheduleCloudFlush,
+    state.editSequence,
+    state.plan,
+    state.saveStatus,
+  ]);
 
   useEffect(() => {
     const online = () => {
       setIsOnline(true);
-      if (repository instanceof SyncedPlanRepository) void repository.flush(accountId);
+      if (cloudFlushTimer.current !== null) {
+        globalThis.clearTimeout(cloudFlushTimer.current);
+        cloudFlushTimer.current = null;
+      }
+      void flushCloud();
     };
     const offline = () => setIsOnline(false);
     globalThis.addEventListener("online", online);
@@ -192,7 +257,7 @@ function PlannerSession({
       globalThis.removeEventListener("online", online);
       globalThis.removeEventListener("offline", offline);
     };
-  }, [accountId, repository]);
+  }, [flushCloud]);
 
   const acceptRemote = async () => {
     const remote = state.conflictingPlan;
@@ -231,7 +296,6 @@ function PlannerSession({
 
   const deletePlan = async () => {
     await repository.delete(accountId);
-    dispatch({ type: "plan-deleted", replacement: createSamplePlan(deviceId) });
   };
 
   const accountControl = (
@@ -314,7 +378,6 @@ export function App({
     () => suppliedRepository ?? createDefaultRepository(),
     [suppliedRepository],
   );
-  const syncStates = useMemo(() => createDefaultSyncStateStore(), []);
   const deviceId = useMemo(
     () => suppliedDeviceId ?? createPersistentDeviceId(),
     [suppliedDeviceId],
@@ -366,11 +429,10 @@ export function App({
         ? new SyncedPlanRepository(
             localRepository,
             cloudRuntime.plans,
-            syncStates,
             () => globalThis.navigator?.onLine ?? true,
           )
         : null,
-    [account, cloudRuntime, localRepository, syncStates],
+    [account, cloudRuntime, localRepository],
   );
 
   useEffect(() => {
@@ -428,7 +490,6 @@ export function App({
   const signOut = async () => {
     if (!cloudRuntime || !account) return;
     await localRepository.delete(account.id);
-    await syncStates.delete(account.id);
     await cloudRuntime.auth.signOut();
   };
 
