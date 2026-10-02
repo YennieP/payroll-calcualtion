@@ -32,6 +32,7 @@ vi.mock("virtual:pwa-register", () => ({ registerSW: vi.fn() }));
 type RegisterOptions = NonNullable<Parameters<typeof registerSW>[0]>;
 
 const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
+const originalOnline = Object.getOwnPropertyDescriptor(navigator, "onLine");
 const registerSWMock = vi.mocked(registerSW);
 let registerOptions: RegisterOptions | undefined;
 let updateServiceWorker: ReturnType<typeof vi.fn<() => Promise<void>>>;
@@ -39,6 +40,14 @@ let updateServiceWorker: ReturnType<typeof vi.fn<() => Promise<void>>>;
 function requireRegisterOptions(): RegisterOptions {
   if (!registerOptions) throw new Error("PWA registration options were not captured.");
   return registerOptions;
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
 }
 
 beforeEach(() => {
@@ -60,12 +69,26 @@ afterEach(() => {
   } else {
     Reflect.deleteProperty(navigator, "serviceWorker");
   }
+  if (originalOnline) {
+    Object.defineProperty(navigator, "onLine", originalOnline);
+  } else {
+    Reflect.deleteProperty(navigator, "onLine");
+  }
 });
 
 class FakeAuthProvider implements AuthProvider {
   private readonly listeners = new Set<(account: Account | null) => void>();
+  private emitInitialState: boolean;
+  private signOutError: Error | null = null;
+  signOutCount = 0;
+  signOutBarrier: Promise<void> | null = null;
 
-  constructor(private account: Account | null) {}
+  constructor(
+    private account: Account | null,
+    emitInitialState = true,
+  ) {
+    this.emitInitialState = emitInitialState;
+  }
 
   currentAccount(): Account | null {
     return this.account;
@@ -84,13 +107,25 @@ class FakeAuthProvider implements AuthProvider {
   async sendPasswordResetEmail(): Promise<void> {}
 
   async signOut(): Promise<void> {
+    this.signOutCount += 1;
+    if (this.signOutBarrier) await this.signOutBarrier;
+    if (this.signOutError) throw this.signOutError;
     this.setAccount(null);
   }
 
   onAuthChange(listener: (account: Account | null) => void): () => void {
     this.listeners.add(listener);
-    listener(this.account);
+    if (this.emitInitialState) listener(this.account);
     return () => this.listeners.delete(listener);
+  }
+
+  resolveInitialState(account: Account | null = this.account) {
+    this.emitInitialState = true;
+    this.setAccount(account);
+  }
+
+  rejectNextSignOut(error: Error) {
+    this.signOutError = error;
   }
 
   switchAccount(account: Account | null) {
@@ -107,6 +142,8 @@ class FakeRemotePlanRepository implements RemotePlanRepository {
   private readonly snapshots = new Map<string, RemotePlanSnapshot>();
   private readonly listeners = new Map<string, Set<(snapshot: RemotePlanSnapshot) => void>>();
   pushCount = 0;
+  pushBarrier: Promise<void> | null = null;
+  pushError: Error | null = null;
 
   async load(accountId: string): Promise<RemotePlanSnapshot | null> {
     return this.snapshots.get(accountId) ?? null;
@@ -118,6 +155,8 @@ class FakeRemotePlanRepository implements RemotePlanRepository {
     expectedRemoteRevision: number,
   ): Promise<RemoteSaveResult> {
     this.pushCount += 1;
+    if (this.pushError) throw this.pushError;
+    if (this.pushBarrier) await this.pushBarrier;
     const remote = this.snapshots.get(accountId);
     const remoteRevision =
       remote?.kind === "plan" ? remote.plan.revision : (remote?.tombstone.revision ?? 0);
@@ -154,8 +193,20 @@ class FakeRemotePlanRepository implements RemotePlanRepository {
   }
 }
 
-function createCloudRuntime(account: Account | null = ACCOUNT) {
-  const auth = new FakeAuthProvider(account);
+class FailOnceDeleteRepository extends MemoryPlanRepository {
+  private shouldFail = true;
+
+  override async delete(accountId: string): Promise<void> {
+    if (accountId === ACCOUNT.id && this.shouldFail) {
+      this.shouldFail = false;
+      throw new Error("Injected cache cleanup failure.");
+    }
+    await super.delete(accountId);
+  }
+}
+
+function createCloudRuntime(account: Account | null = ACCOUNT, emitInitialState = true) {
+  const auth = new FakeAuthProvider(account, emitInitialState);
   const plans = new FakeRemotePlanRepository();
   return { runtime: { auth, plans } satisfies CloudRuntime, auth, plans };
 }
@@ -285,6 +336,21 @@ describe("local-first planner", () => {
     await expect(repository.load("anonymous-local")).resolves.toBeNull();
   });
 
+  it("keeps the planner behind an authentication gate until the first auth state resolves", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime(ACCOUNT, false);
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+
+    expect(screen.getByRole("heading", { name: "正在恢复账户" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "已置顶" })).not.toBeInTheDocument();
+    expect(await repository.load("anonymous-local")).toBeNull();
+
+    act(() => auth.resolveInitialState());
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+  });
+
   it("downloads a newer cloud plan into an empty device cache", async () => {
     const repository = new MemoryPlanRepository();
     const { runtime, plans } = createCloudRuntime();
@@ -364,6 +430,161 @@ describe("local-first planner", () => {
     });
   });
 
+  it("flushes a pending local edit before signing out and clearing the account cache", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    const blockedPush = deferred();
+    plans.pushBarrier = blockedPush.promise;
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    fireEvent.change(amount, { target: { value: "4321" } });
+    fireEvent.blur(amount);
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    await user.click(screen.getByRole("button", { name: "等待同步后退出" }));
+    expect(auth.currentAccount()).toEqual(ACCOUNT);
+    await expect(repository.load(ACCOUNT.id)).resolves.not.toBeNull();
+
+    blockedPush.resolve();
+    expect(await screen.findByRole("button", { name: /跨设备同步/ })).toBeVisible();
+    const remote = await plans.load(ACCOUNT.id);
+    expect(remote).toMatchObject({ kind: "plan", plan: { revision: 2 } });
+    expect(
+      remote?.kind === "plan" ? remote.plan.categories[0].goals[0].monthlyAmountCents : null,
+    ).toBe(432_100);
+    await expect(repository.load(ACCOUNT.id)).resolves.toBeNull();
+  });
+
+  it("keeps recoverable account data when authentication sign-out fails", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    auth.rejectNextSignOut(new Error("Injected auth failure."));
+    const blockedSignOut = deferred();
+    auth.signOutBarrier = blockedSignOut.promise;
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    await screen.findByRole("heading", { name: "已置顶" });
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    expect(screen.getByRole("button", { name: "退出并清除此设备缓存" })).toBeDisabled();
+    await expect(repository.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 1 });
+    blockedSignOut.resolve();
+
+    expect(await screen.findByText("账户操作失败，请稍后重试。")).toBeVisible();
+    expect(auth.currentAccount()).toEqual(ACCOUNT);
+    await expect(repository.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 1 });
+  });
+
+  it("blocks safe sign-out after a local-save failure but permits explicit discard", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    vi.spyOn(repository, "savePlanAndSyncState").mockRejectedValueOnce(
+      new Error("Injected local save failure."),
+    );
+    fireEvent.change(amount, { target: { value: "4888" } });
+    fireEvent.blur(amount);
+    await waitFor(() => expect(screen.getByTitle("Injected local save failure.")).toBeVisible());
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    await user.click(screen.getByRole("button", { name: "等待同步后退出" }));
+    expect(await screen.findByText("本机修改尚未安全保存，暂时不能退出。")).toBeVisible();
+    expect(auth.currentAccount()).toEqual(ACCOUNT);
+    await expect(repository.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 1 });
+
+    await user.click(screen.getByRole("button", { name: "放弃未同步修改并退出" }));
+    expect(await screen.findByRole("button", { name: /跨设备同步/ })).toBeVisible();
+    expect(auth.currentAccount()).toBeNull();
+    await expect(repository.load(ACCOUNT.id)).resolves.toBeNull();
+  });
+
+  it("allows explicit discard while offline without changing the cloud copy", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    const remotePlan = { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 };
+    plans.seed(ACCOUNT.id, remotePlan);
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    fireEvent.change(amount, { target: { value: "4999" } });
+    fireEvent.blur(amount);
+    await waitFor(async () => {
+      const snapshot = await repository.loadPlanSync(ACCOUNT.id);
+      expect(snapshot.syncState?.pendingRevision).not.toBeNull();
+    });
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    expect(screen.getByRole("button", { name: "等待同步后退出" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "放弃未同步修改并退出" }));
+
+    expect(await screen.findByRole("button", { name: /跨设备同步/ })).toBeVisible();
+    expect(auth.currentAccount()).toBeNull();
+    await expect(repository.load(ACCOUNT.id)).resolves.toBeNull();
+    await expect(plans.load(ACCOUNT.id)).resolves.toEqual({ kind: "plan", plan: remotePlan });
+  });
+
+  it("keeps pending data and the authenticated session when cloud flush fails", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    plans.pushError = new Error("Injected cloud write failure.");
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    fireEvent.change(amount, { target: { value: "4777" } });
+    fireEvent.blur(amount);
+    await waitFor(() => expect(plans.pushCount).toBeGreaterThan(0));
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    expect(screen.getByText("同步失败")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    await user.click(screen.getByRole("button", { name: "等待同步后退出" }));
+
+    expect(
+      await screen.findByText("云端同步尚未完成，请重试、先导出计划，或明确放弃修改。"),
+    ).toBeVisible();
+    expect(auth.currentAccount()).toEqual(ACCOUNT);
+    await expect(repository.loadPlanSync(ACCOUNT.id)).resolves.toMatchObject({
+      plan: { revision: 2 },
+      syncState: { pendingRevision: 2 },
+    });
+  });
+
+  it("blocks on failed cache cleanup after auth sign-out and supports a safe retry", async () => {
+    const repository = new FailOnceDeleteRepository();
+    const { runtime, auth, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 });
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+    await screen.findByRole("heading", { name: "已置顶" });
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+
+    expect(await screen.findByRole("heading", { name: "设备缓存尚未清理" })).toBeVisible();
+    expect(auth.currentAccount()).toBeNull();
+    await expect(repository.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 1 });
+
+    await user.click(screen.getByRole("button", { name: "重试清理设备缓存" }));
+    expect(await screen.findByRole("button", { name: /跨设备同步/ })).toBeVisible();
+    await expect(repository.load(ACCOUNT.id)).resolves.toBeNull();
+  });
+
   it("shows a two-device revision conflict and can keep the current local edit", async () => {
     const repository = new MemoryPlanRepository();
     const { runtime, plans } = createCloudRuntime();
@@ -398,6 +619,10 @@ describe("local-first planner", () => {
     });
 
     expect(await screen.findByText("检测到另一份较新的计划版本")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    expect(screen.getByRole("button", { name: "等待同步后退出" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "继续编辑" }));
     await user.click(screen.getByRole("button", { name: "保留当前修改" }));
     await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
     await waitFor(() =>

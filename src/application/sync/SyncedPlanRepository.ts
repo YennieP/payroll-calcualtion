@@ -72,6 +72,11 @@ export class SyncedPlanRepository implements PlanRepository {
     return () => this.syncListeners.delete(listener);
   }
 
+  async hasPendingChanges(accountId: string): Promise<boolean> {
+    const { state } = await this.readLocal(accountId);
+    return state.pendingRevision !== null || state.pendingDelete;
+  }
+
   async load(accountId: string): Promise<PlanDocument | null> {
     const { plan: localPlan, state } = await this.readLocal(accountId);
     if (!this.isOnline()) {

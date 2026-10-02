@@ -3,18 +3,21 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import type { Account, AuthProvider } from "../../ports/AuthProvider";
 import type { CloudSyncSnapshot } from "../../application/sync/SyncedPlanRepository";
 import { exportPlanJson } from "../../application/planTransfer";
+import type { SaveStatus } from "../../app/appReducer";
 import type { PlanDocument } from "../../domain/plan";
 
 type AuthMode = "sign-in" | "register" | "reset";
+export type SignOutStrategy = "sync" | "discard";
 
 export interface AccountControlProps {
   provider?: AuthProvider;
   account: Account | null;
   sync: CloudSyncSnapshot | null;
+  saveStatus: SaveStatus;
   plan: PlanDocument;
   onImportPlan: (source: string) => Promise<void>;
   onDeletePlan: () => Promise<void>;
-  onSignOut?: () => Promise<void>;
+  onSignOut?: (strategy: SignOutStrategy) => Promise<void>;
 }
 
 const SYNC_LABELS: Record<CloudSyncSnapshot["status"], string> = {
@@ -32,6 +35,16 @@ function readableAuthError(error: unknown): string {
   if (error.message.includes("auth/email-already-in-use")) return "这个邮箱已经注册。";
   if (error.message.includes("auth/weak-password")) return "密码至少需要 6 个字符。";
   if (error.message.includes("auth/invalid-email")) return "请输入有效的邮箱地址。";
+  if (error.message.includes("sign-out/offline"))
+    return "当前离线，无法确认云端同步。请先导出计划，或明确放弃未同步修改。";
+  if (error.message.includes("sign-out/conflict"))
+    return "请先解决同步冲突，或导出后明确放弃本机修改。";
+  if (error.message.includes("sign-out/local-save-failed"))
+    return "本机修改尚未安全保存，暂时不能退出。";
+  if (error.message.includes("sign-out/sync-failed"))
+    return "云端同步尚未完成，请重试、先导出计划，或明确放弃修改。";
+  if (error.message.includes("sign-out/cache-cleanup-failed"))
+    return "账户已退出，但此设备缓存清理失败，请重试清理。";
   return "账户操作失败，请稍后重试。";
 }
 
@@ -39,6 +52,7 @@ export function AccountControl({
   provider,
   account,
   sync,
+  saveStatus,
   plan,
   onImportPlan,
   onDeletePlan,
@@ -52,6 +66,7 @@ export function AccountControl({
   const [message, setMessage] = useState<string | null>(null);
   const [dataMessage, setDataMessage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -72,12 +87,13 @@ export function AccountControl({
     }
   };
 
-  const signOut = async () => {
+  const signOut = async (strategy: SignOutStrategy) => {
     if (!onSignOut) return;
     setBusy(true);
     setMessage(null);
     try {
-      await onSignOut();
+      await onSignOut(strategy);
+      setConfirmSignOut(false);
       setOpen(false);
     } catch (error: unknown) {
       setMessage(readableAuthError(error));
@@ -85,6 +101,9 @@ export function AccountControl({
       setBusy(false);
     }
   };
+
+  const requiresSignOutChoice =
+    account !== null && (saveStatus !== "saved" || sync?.status !== "synced");
 
   const exportPlan = () => {
     const blob = new Blob([exportPlanJson(plan)], { type: "application/json" });
@@ -162,10 +181,43 @@ export function AccountControl({
               <span>当前账户</span>
               <strong>{account.email ?? "未提供邮箱"}</strong>
               {sync?.error ? <p role="alert">{sync.error}</p> : null}
+              {message ? <p role="alert">{message}</p> : null}
               {onSignOut ? (
-                <button type="button" disabled={busy} onClick={() => void signOut()}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    requiresSignOutChoice ? setConfirmSignOut(true) : void signOut("sync")
+                  }
+                >
                   退出并清除此设备缓存
                 </button>
+              ) : null}
+              {confirmSignOut ? (
+                <div className="delete-confirmation" role="alert">
+                  <p>这份计划还有未确认的云端状态。退出前请选择如何处理本机修改。</p>
+                  <button
+                    type="button"
+                    disabled={
+                      busy ||
+                      saveStatus === "conflict" ||
+                      sync?.status === "offline" ||
+                      sync?.status === "conflict"
+                    }
+                    onClick={() => void signOut("sync")}
+                  >
+                    等待同步后退出
+                  </button>
+                  <button type="button" disabled={busy} onClick={exportPlan}>
+                    先导出 JSON
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => void signOut("discard")}>
+                    放弃未同步修改并退出
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => setConfirmSignOut(false)}>
+                    继续编辑
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : provider ? (

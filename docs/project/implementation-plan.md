@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成           | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成           | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成           | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 7.1 进行中 | S1–S3 已完成；下一项为 S4 认证恢复与安全退出，Phase 8 继续阻断。                            |
+| 产品实现     | Phase 7.1 进行中 | S1–S4 已完成；下一项为 S5 字体离线就绪与缓存升级，Phase 8 继续阻断。                        |
 | 部署         | 未开始           | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -195,7 +195,7 @@ React PWA
 
 ## Phase 7.1 — 修复跨阶段集成问题
 
-状态：进行中。S1–S3 已于 2026-10-02 完成并通过完整门禁；下一项为 S4。Phase 8 在本阶段全部退出条件满足前保持阻断。
+状态：进行中。S1–S4 已于 2026-10-02 完成并通过完整门禁；下一项为 S5。Phase 8 在本阶段全部退出条件满足前保持阻断。
 
 ### 执行协议
 
@@ -210,7 +210,7 @@ React PWA
 - [x] **S1 — 重建删除与 revision 协议（阻断级）**：使用可同步、单调递增的 tombstone/generation 表达删除；让本地和远端订阅能够传播删除；禁止删除后 revision 归零导致旧设备静默覆盖新计划。覆盖在线删除、离线删除后重开、两设备删除传播、删除后重建及旧设备再编辑。
 - [x] **S2 — 保证本地计划与同步元数据原子一致（阻断级）**：让计划、pending revision 和 S1 新增的本地删除意图（含 tombstone revision）在同一可恢复事务边界内提交，或提供等价的启动自愈规则。注入计划写入、同步状态写入、删除各步骤和进程中断故障，证明本地新版本不会被旧云端静默替换、待同步删除不会丢失。
 - [x] **S3 — 分离本地持久化与云端 debounce（高优先级）**：每次本地修改立即通过 S2 的原子计划/同步记录进入 IndexedDB，仅延迟/合并远端 `flush()`；覆盖编辑后 250ms 内关闭、页面卸载、PWA 更新和会话切换。
-- [ ] **S4 — 加固认证恢复与退出登录（高优先级）**：首次认证状态确定前不开放可编辑匿名会话；退出前处理 local-change、syncing、offline、error 和 conflict，提供等待同步、导出或明确放弃修改的安全路径；不能把 S3 的 UI `saved`（仅表示已保存到本机）当作云端完成，必须同时检查账户级 pending/sync 状态；使用 S2 的原子账户清理，但必须验证 sign-out 失败不会先清除可恢复数据。
+- [x] **S4 — 加固认证恢复与退出登录（高优先级）**：首次认证状态确定前不开放可编辑匿名会话；退出前处理 local-change、syncing、offline、error 和 conflict，提供等待同步、导出或明确放弃修改的安全路径；不能把 S3 的 UI `saved`（仅表示已保存到本机）当作云端完成，必须同时检查账户级 pending/sync 状态；使用 S2 的原子账户清理，但必须验证 sign-out 失败不会先清除可恢复数据。
 - [ ] **S5 — 修正字体离线就绪与缓存升级（高优先级）**：区分应用外壳可离线和全部七主题字体已缓存；warmup 失败可重试；缓存和资产清单由内容版本驱动并清理旧版本。覆盖 warmup 完成前断网、失败重试及字体版本升级。
 - [ ] **S6 — 建立计划容量与金额范围契约（高优先级）**：为分类/目标数量、UTF-8 序列化大小、单项与聚合金额设置 Domain、导入、UI 和 Repository 一致的边界；在 Firestore 1 MiB 和税务求解上限前给出可恢复提示，不允许渲染期 `RangeError` 崩溃。
 - [ ] **S7 — 对齐 Firestore Rules 与加载错误语义（中优先级）**：收紧可由 Rules 表达的嵌套字段、枚举和数量约束；明确区分云端不存在、暂时不可用和数据损坏；adapter 解析失败必须进入受控错误状态。增加恶意嵌套数据和远端暂时失败测试。
@@ -275,6 +275,20 @@ React PWA
 11. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-02 — 完成 Phase 7.1 S4 认证恢复与安全退出修复
+
+- Firebase runtime 和首次 auth state 均确定前，应用只显示不可编辑的认证恢复门禁，不再短暂挂载匿名 `PlannerSession`。
+- 安全退出现在先取消待执行的 cloud debounce、等待串行本地保存，并根据账户级 pending metadata 执行/验证云端 flush；`saved` 只代表本机持久化，不会被误当作云端完成。离线、同步错误、冲突和本地保存失败均保留会话与缓存，用户可继续编辑、先导出 JSON，或明确放弃未同步修改。
+- 退出顺序固定为“完成安全决策 → Firebase sign-out → 原子清理该账户本机记录”。认证退出失败不会删除缓存；认证已退出但缓存清理失败时显示阻断式重试门禁，避免暴露错误账户会话或静默遗留私人缓存。
+- 针对性回归覆盖延迟首次 auth 回调、pending flush 等待、云端错误、离线显式放弃、冲突阻断、本地保存失败、认证退出失败和缓存清理重试。完整 `npm run verify` 通过：17 个测试文件、86 项单元/组件测试、生产构建、PWA 离线、七主题/582 个 WOFF2、320–2000px 质量浏览器、Firebase Emulator 与真实双浏览器同步检查均通过。
+- 基于 S4 后最新仓库复核 S5–S8：S5 仍是下一项且根因/优先级不变；S4 新增的认证与缓存清理全屏门禁需要纳入 S8 的移动端、键盘和可访问性浏览器路径。S6 的容量边界仍需覆盖安全退出中的 JSON 导出，但范围和顺序不变。S7 的加载错误语义仍未解决，并应保留“云端写失败时 pending 不被清除且安全退出被阻止”的回归。S8 继续保留 S1–S4 的全部数据生命周期回归。
+
+### 2026-10-02 — 启动 Phase 7.1 S4 认证恢复与安全退出修复
+
+- 首次加载必须先完成 Firebase runtime 与首个认证状态判定，再决定显示已登录计划还是匿名计划；认证恢复期间只显示不可编辑门禁，避免用户修改一个随后被账号会话替换的临时匿名计划。
+- 退出流程将以 S3 后的真实语义判断风险：UI `saved` 只代表 IndexedDB 已提交，仍需结合账户级 pending revision 和 cloud sync 状态。存在 local-change、syncing、offline、error 或 conflict 时，用户可等待同步、先导出 JSON，或明确放弃未同步修改。
+- 退出认证失败时不得先删除账户缓存；认证退出成功后再原子清理该账户记录。针对性测试将覆盖认证恢复、同步等待、离线/错误/冲突、明确放弃、sign-out 失败和缓存清理失败。本轮不修改字体缓存、容量边界或 Firestore 深层校验。
 
 ### 2026-10-02 — 完成 Phase 7.1 S3 本地即时持久化修复
 
@@ -469,7 +483,7 @@ Last updated: 2026-10-02
 | Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
 | Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
 | Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 7.1 active | S1–S3 are complete; S4 auth restoration and safe sign-out is next, and Phase 8 remains blocked.                |
+| Product implementation | Phase 7.1 active | S1–S4 are complete; S5 font offline readiness and cache upgrades are next, and Phase 8 remains blocked.        |
 | Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
 
 ## Architecture baseline
@@ -652,7 +666,7 @@ Exit criteria:
 
 ## Phase 7.1 — Resolve cross-phase integration gaps
 
-Status: In progress. S1–S3 passed the complete gate on 2026-10-02, and S4 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
+Status: In progress. S1–S4 passed the complete gate on 2026-10-02, and S5 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
 
 ### Execution protocol
 
@@ -667,7 +681,7 @@ Status: In progress. S1–S3 passed the complete gate on 2026-10-02, and S4 is n
 - [x] **S1 — Rebuild deletion and revision semantics (blocker)**: represent deletion with a synchronizable, monotonically versioned tombstone/generation; propagate deletion through local and remote subscriptions; prevent revision reset after recreation from allowing a stale device to overwrite a new plan. Cover online deletion, offline deletion plus reopen, two-device deletion propagation, recreation, and a later stale-device edit.
 - [x] **S2 — Make local plan and sync metadata atomic (blocker)**: commit the plan, pending revision, and the local deletion intent introduced by S1 (including its tombstone revision) within one recoverable transaction boundary, or provide equivalent startup recovery rules. Inject plan-write, sync-state-write, every deletion step, and process-interruption failures, and prove that an old cloud revision cannot silently replace a newer local version or lose a pending deletion.
 - [x] **S3 — Separate local persistence from cloud debounce (high)**: persist every local edit immediately through S2's atomic plan/sync record and delay/coalesce only remote `flush()` calls. Cover closing within 250ms, page unmount, PWA update, and session switching.
-- [ ] **S4 — Harden auth restoration and sign-out (high)**: do not expose an editable anonymous session before the first auth state resolves; handle local-change, syncing, offline, error, and conflict before sign-out with safe wait, export, or explicit-discard paths; do not treat S3's UI `saved` state (local persistence only) as cloud completion, and inspect account-level pending/sync state as well; use S2's atomic account cleanup, but prove sign-out failure cannot clear recoverable data first.
+- [x] **S4 — Harden auth restoration and sign-out (high)**: do not expose an editable anonymous session before the first auth state resolves; handle local-change, syncing, offline, error, and conflict before sign-out with safe wait, export, or explicit-discard paths; do not treat S3's UI `saved` state (local persistence only) as cloud completion, and inspect account-level pending/sync state as well; use S2's atomic account cleanup, but prove sign-out failure cannot clear recoverable data first.
 - [ ] **S5 — Correct font offline readiness and cache upgrades (high)**: distinguish shell readiness from complete seven-theme font caching; retry failed warmup; version caches and manifests by content and remove obsolete versions. Cover going offline before warmup completes, retry after failure, and font-version upgrades.
 - [ ] **S6 — Establish plan-capacity and money-range contracts (high)**: align Domain, import, UI, and Repository limits for category/goal counts, UTF-8 serialized bytes, individual values, and aggregates. Surface recoverable messages before Firestore's 1 MiB limit or the tax solver ceiling; rendering must not crash with `RangeError`.
 - [ ] **S7 — Align Firestore Rules and cloud-load error semantics (medium)**: tighten nested fields, enums, and count limits that Rules can express; distinguish missing, temporarily unavailable, and corrupt cloud data; route adapter parse failures into a controlled error state. Add malformed nested-data and transient-load tests.
@@ -732,6 +746,20 @@ Exit criteria:
 11. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-02 — Phase 7.1 S4 auth-restoration and safe-sign-out repair completed
+
+- Until both the Firebase runtime and the first auth state resolve, the app now renders only a non-editable authentication gate and never mounts a transient anonymous `PlannerSession`.
+- Safe sign-out now cancels a pending cloud debounce, waits for the serialized local-save queue, then flushes and verifies account-level pending metadata. The UI's `saved` state remains local-only and is not treated as cloud acknowledgement. Offline, sync-error, conflict, and local-save-failure states preserve the session and cache while offering continued editing, JSON export, or an explicit discard choice.
+- Sign-out ordering is fixed as “finish the safety decision → Firebase sign-out → atomically clear that account's local record.” A failed auth sign-out leaves the cache intact; a cleanup failure after successful auth sign-out shows a blocking retry gate instead of exposing the wrong session or silently leaving private cache data behind.
+- Focused regressions cover a deferred first auth callback, pending-flush waiting, cloud errors, explicit offline discard, conflict blocking, local-save failure, auth sign-out failure, and cache-cleanup retry. The complete `npm run verify` passed: 17 test files, 86 unit/component tests, production build, PWA offline checks, all seven themes and 582 WOFF2 assets, the 320–2000px quality browser suite, Firebase Emulator tests, and real two-browser synchronization checks.
+- Re-audited S5–S8 against the post-S4 repository. S5 remains next with the same cause and priority; S4's new full-screen auth and cache-cleanup gates must be added to S8's mobile, keyboard, and accessibility browser paths. S6 still needs to cover JSON export from safe sign-out when enforcing plan-size limits, without changing its order or scope. S7's cloud-load error semantics remain unresolved and should retain the regression proving that cloud-write failure preserves pending state and blocks safe sign-out. S8 retains all S1–S4 data-lifecycle regressions.
+
+### 2026-10-02 — Phase 7.1 S4 auth-restoration and safe-sign-out repair started
+
+- Initial load must resolve the Firebase runtime and its first authentication state before choosing between the signed-in plan and the anonymous plan. While auth restoration is pending, the app will show a non-editable gate so a user cannot edit a temporary anonymous session that is about to be replaced.
+- Sign-out risk uses S3's actual semantics: UI `saved` means IndexedDB committed, so account-level pending revision and cloud-sync status must also be considered. For local-change, syncing, offline, error, or conflict, the user can wait for sync, export JSON first, or explicitly discard unsynchronized changes.
+- Authentication sign-out failure must not delete the account cache first; only a successful auth sign-out may be followed by atomic account-record cleanup. Focused tests will cover auth restoration, sync waiting, offline/error/conflict, explicit discard, sign-out failure, and cache-cleanup failure. This unit does not change font caching, capacity limits, or deep Firestore validation.
 
 ### 2026-10-02 — Phase 7.1 S3 immediate-local-persistence repair completed
 

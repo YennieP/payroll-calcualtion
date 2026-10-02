@@ -10,7 +10,7 @@ import {
   type CloudSyncSnapshot,
 } from "../application/sync/SyncedPlanRepository";
 import type { PlanDocument } from "../domain/plan";
-import { AccountControl } from "../features/auth/AccountControl";
+import { AccountControl, type SignOutStrategy } from "../features/auth/AccountControl";
 import { Planner } from "../features/planner/Planner";
 import type { Account, AuthProvider } from "../ports/AuthProvider";
 import type { CloudRuntime } from "../ports/CloudRuntime";
@@ -35,7 +35,7 @@ interface PlannerSessionProps {
   authProvider?: AuthProvider;
   account: Account | null;
   sync: CloudSyncSnapshot | null;
-  onSignOut?: () => Promise<void>;
+  onSignOut?: (strategy: SignOutStrategy) => Promise<void>;
   hasPreloadedPlan?: boolean;
   preloadedPlan?: PlanDocument | null;
 }
@@ -56,6 +56,12 @@ interface AuthSession {
 interface SyncSession {
   repository: SyncedPlanRepository;
   snapshot: CloudSyncSnapshot;
+}
+
+interface CacheCleanupState {
+  accountId: string;
+  status: "clearing" | "error";
+  message: string | null;
 }
 
 function createUuid(): string {
@@ -102,6 +108,7 @@ function PlannerSession({
   const localSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const lastQueuedEditSequence = useRef(-1);
   const persistedRevision = useRef(0);
+  const localSaveError = useRef<unknown>(null);
 
   const createMetadata = useCallback(
     () => ({ updatedAt: new Date().toISOString(), updatedByDevice: deviceId }),
@@ -207,6 +214,7 @@ function PlannerSession({
     localSaveQueue.current = localSaveQueue.current
       .catch(() => undefined)
       .then(async () => {
+        localSaveError.current = null;
         const expectedRevision = Math.max(snapshot.revision, persistedRevision.current);
         const result = await repository.save(
           accountId,
@@ -225,6 +233,7 @@ function PlannerSession({
         }
       })
       .catch((error: unknown) => {
+        localSaveError.current = error;
         if (!active.current) return;
         dispatch({
           type: "storage-failed",
@@ -298,15 +307,43 @@ function PlannerSession({
     await repository.delete(accountId);
   };
 
+  const safelySignOut = async (strategy: SignOutStrategy) => {
+    if (!onSignOut) return;
+    if (cloudFlushTimer.current !== null) {
+      globalThis.clearTimeout(cloudFlushTimer.current);
+      cloudFlushTimer.current = null;
+    }
+    await localSaveQueue.current;
+    if (strategy === "sync" && localSaveError.current) {
+      throw new Error("sign-out/local-save-failed");
+    }
+
+    if (strategy === "sync" && repository instanceof SyncedPlanRepository) {
+      if (state.saveStatus === "conflict") throw new Error("sign-out/conflict");
+      if (!(globalThis.navigator?.onLine ?? true)) throw new Error("sign-out/offline");
+      const result = await repository.flush(accountId);
+      if (result.status === "conflict") {
+        dispatch({ type: "save-conflicted", remote: result.remote });
+        throw new Error("sign-out/conflict");
+      }
+      if (await repository.hasPendingChanges(accountId)) {
+        throw new Error("sign-out/sync-failed");
+      }
+    }
+
+    await onSignOut(strategy);
+  };
+
   const accountControl = (
     <AccountControl
       provider={authProvider}
       account={account}
       sync={sync}
+      saveStatus={state.saveStatus}
       plan={state.plan}
       onImportPlan={importPlan}
       onDeletePlan={deletePlan}
-      onSignOut={onSignOut}
+      onSignOut={onSignOut ? safelySignOut : undefined}
     />
   );
 
@@ -330,14 +367,14 @@ function SessionGate({
   busy,
   onImport,
   onSkip,
-  onSignOut,
+  onDiscardAndSignOut,
 }: {
   account: Account;
   preparation: CloudPreparation;
   busy: boolean;
   onImport: () => Promise<void>;
   onSkip: () => void;
-  onSignOut: () => Promise<void>;
+  onDiscardAndSignOut: () => Promise<void>;
 }) {
   return (
     <div className="planner-stage session-gate" data-theme="rouge">
@@ -360,8 +397,43 @@ function SessionGate({
           </div>
         ) : null}
         {preparation.status === "error" ? (
-          <button type="button" disabled={busy} onClick={() => void onSignOut()}>
-            退出账户并返回本机模式
+          <button type="button" disabled={busy} onClick={() => void onDiscardAndSignOut()}>
+            放弃此账户的本机缓存并退出
+          </button>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function AuthenticationGate({ message = "正在恢复账户状态…" }: { message?: string }) {
+  return (
+    <div className="planner-stage session-gate" data-theme="rouge">
+      <section className="session-gate-card" role="status" aria-label="正在恢复账户">
+        <span>WORTHWHILE · CLOUD</span>
+        <h1>正在恢复账户</h1>
+        <p>{message}</p>
+      </section>
+    </div>
+  );
+}
+
+function CacheCleanupGate({
+  state,
+  onRetry,
+}: {
+  state: CacheCleanupState;
+  onRetry: () => Promise<void>;
+}) {
+  return (
+    <div className="planner-stage session-gate" data-theme="rouge">
+      <section className="session-gate-card" role={state.status === "error" ? "alert" : "status"}>
+        <span>WORTHWHILE · PRIVACY</span>
+        <h1>{state.status === "error" ? "设备缓存尚未清理" : "正在安全退出"}</h1>
+        <p>{state.message ?? "账户已退出，正在清除此设备上的私人计划缓存…"}</p>
+        {state.status === "error" ? (
+          <button type="button" onClick={() => void onRetry()}>
+            重试清理设备缓存
           </button>
         ) : null}
       </section>
@@ -384,6 +456,12 @@ export function App({
   );
   const shouldAutoLoadCloud =
     suppliedRepository === undefined && suppliedCloudRuntime === undefined;
+  const [cloudResolution, setCloudResolution] = useState<"loading" | "ready">(
+    shouldAutoLoadCloud ? "loading" : "ready",
+  );
+  const [authResolved, setAuthResolved] = useState(
+    suppliedCloudRuntime === undefined ? !shouldAutoLoadCloud : suppliedCloudRuntime === null,
+  );
   const [cloudRuntime, setCloudRuntime] = useState<CloudRuntime | null>(
     suppliedCloudRuntime ?? null,
   );
@@ -398,6 +476,8 @@ export function App({
   const [preparationResult, setPreparationResult] = useState<CloudPreparation | null>(null);
   const [gateBusy, setGateBusy] = useState(false);
   const [syncSession, setSyncSession] = useState<SyncSession | null>(null);
+  const [cacheCleanup, setCacheCleanup] = useState<CacheCleanupState | null>(null);
+  const signingOutAccountId = useRef<string | null>(null);
 
   const account = authSession?.runtime === cloudRuntime ? authSession.account : null;
 
@@ -406,10 +486,16 @@ export function App({
     let cancelled = false;
     loadFirebaseRuntime()
       .then((runtime) => {
-        if (!cancelled) setCloudRuntime(runtime);
+        if (cancelled) return;
+        setCloudRuntime(runtime);
+        setCloudResolution("ready");
+        setAuthResolved(runtime === null);
       })
       .catch(() => {
-        if (!cancelled) setCloudRuntime(null);
+        if (cancelled) return;
+        setCloudRuntime(null);
+        setCloudResolution("ready");
+        setAuthResolved(true);
       });
     return () => {
       cancelled = true;
@@ -419,7 +505,9 @@ export function App({
   useEffect(() => {
     if (!cloudRuntime) return;
     return cloudRuntime.auth.onAuthChange((nextAccount) => {
+      if (nextAccount === null && signingOutAccountId.current !== null) return;
       setAuthSession({ runtime: cloudRuntime, account: nextAccount });
+      setAuthResolved(true);
     });
   }, [cloudRuntime]);
 
@@ -487,11 +575,50 @@ export function App({
         }
     : null;
 
+  const clearSignedOutCache = async (accountId: string) => {
+    setCacheCleanup({ accountId, status: "clearing", message: null });
+    try {
+      await localRepository.delete(accountId);
+      signingOutAccountId.current = null;
+      setPreparationResult(null);
+      setAuthSession(cloudRuntime ? { runtime: cloudRuntime, account: null } : null);
+      setCacheCleanup(null);
+    } catch {
+      setCacheCleanup({
+        accountId,
+        status: "error",
+        message: "账户已经退出，但本机私人缓存尚未清除。请保持此页面打开并重试。",
+      });
+      throw new Error("sign-out/cache-cleanup-failed");
+    }
+  };
+
   const signOut = async () => {
     if (!cloudRuntime || !account) return;
-    await localRepository.delete(account.id);
-    await cloudRuntime.auth.signOut();
+    const accountId = account.id;
+    signingOutAccountId.current = accountId;
+    try {
+      await cloudRuntime.auth.signOut();
+    } catch (error) {
+      signingOutAccountId.current = null;
+      setCacheCleanup(null);
+      throw error;
+    }
+    await clearSignedOutCache(accountId);
   };
+
+  if (cloudResolution === "loading" || (cloudRuntime !== null && !authResolved)) {
+    return <AuthenticationGate />;
+  }
+
+  if (cacheCleanup) {
+    return (
+      <CacheCleanupGate
+        state={cacheCleanup}
+        onRetry={() => clearSignedOutCache(cacheCleanup.accountId)}
+      />
+    );
+  }
 
   if (account && cloudRuntime && syncedRepository && preparation?.accountId === account.id) {
     if (preparation.status !== "ready") {
@@ -536,7 +663,7 @@ export function App({
             }
           }}
           onSkip={() => setPreparationResult({ ...preparation, status: "ready" })}
-          onSignOut={signOut}
+          onDiscardAndSignOut={signOut}
         />
       );
     }

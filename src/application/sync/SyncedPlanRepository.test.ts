@@ -98,6 +98,7 @@ describe("SyncedPlanRepository", () => {
       status: "saved",
       revision: 2,
     });
+    await expect(repository.hasPendingChanges(ACCOUNT_ID)).resolves.toBe(true);
     expect(await remote.load(ACCOUNT_ID)).toBeNull();
 
     online = true;
@@ -109,6 +110,7 @@ describe("SyncedPlanRepository", () => {
       kind: "plan",
       plan: { revision: 2, updatedAt: "2026-10-01T18:00:00.000Z" },
     });
+    await expect(repository.hasPendingChanges(ACCOUNT_ID)).resolves.toBe(false);
   });
 
   it("serializes overlapping cloud flushes without clearing a newer pending edit", async () => {

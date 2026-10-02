@@ -10,6 +10,7 @@ const ACCOUNT: Account = { id: "user-one", displayName: null, email: "planner@ex
 const PLAN = createSamplePlan("30000000-0000-4000-8000-000000000001");
 
 const DATA_PROPS = {
+  saveStatus: "saved" as const,
   plan: PLAN,
   onImportPlan: vi.fn(async () => undefined),
   onDeletePlan: vi.fn(async () => undefined),
@@ -54,7 +55,7 @@ describe("AccountControl", () => {
     expect(screen.getByText("重置邮件已发送，请检查收件箱。")).toBeVisible();
   });
 
-  it("shows sync status and delegates privacy-safe sign-out cleanup", async () => {
+  it("requires an explicit strategy when cloud state is not safely synchronized", async () => {
     const user = userEvent.setup();
     const onSignOut = vi.fn(async () => undefined);
     render(
@@ -70,7 +71,60 @@ describe("AccountControl", () => {
     await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
     expect(screen.getByText("离线待同步")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
-    expect(onSignOut).toHaveBeenCalledOnce();
+    expect(onSignOut).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "等待同步后退出" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "放弃未同步修改并退出" }));
+    expect(onSignOut).toHaveBeenCalledWith("discard");
+  });
+
+  it("waits for the safe sync path when both local and cloud state are settled", async () => {
+    const user = userEvent.setup();
+    const onSignOut = vi.fn(async () => undefined);
+    render(
+      <AccountControl
+        provider={createAuthProvider()}
+        account={ACCOUNT}
+        sync={{ status: "synced", error: null }}
+        onSignOut={onSignOut}
+        {...DATA_PROPS}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    expect(onSignOut).toHaveBeenCalledWith("sync");
+  });
+
+  it("surfaces cloud errors and blocks the wait path for an unresolved conflict", async () => {
+    const user = userEvent.setup();
+    const onSignOut = vi.fn(async () => undefined);
+    const { rerender } = render(
+      <AccountControl
+        provider={createAuthProvider()}
+        account={ACCOUNT}
+        sync={{ status: "error", error: "Cloud unavailable." }}
+        onSignOut={onSignOut}
+        {...DATA_PROPS}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
+    expect(screen.getByText("Cloud unavailable.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
+    expect(screen.getByRole("button", { name: "等待同步后退出" })).toBeEnabled();
+
+    rerender(
+      <AccountControl
+        provider={createAuthProvider()}
+        account={ACCOUNT}
+        sync={{ status: "conflict", error: null }}
+        onSignOut={onSignOut}
+        {...DATA_PROPS}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "等待同步后退出" })).toBeDisabled();
+    expect(onSignOut).not.toHaveBeenCalled();
   });
 
   it("keeps local-only data controls available and requires delete confirmation", async () => {
@@ -80,6 +134,7 @@ describe("AccountControl", () => {
       <AccountControl
         account={null}
         sync={null}
+        saveStatus="saved"
         plan={PLAN}
         onImportPlan={vi.fn(async () => undefined)}
         onDeletePlan={onDeletePlan}
