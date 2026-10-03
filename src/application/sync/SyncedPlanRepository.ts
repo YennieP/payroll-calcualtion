@@ -99,6 +99,12 @@ export class SyncedPlanRepository implements PlanRepository {
     const { plan: localPlan, state } = await this.readLocal(accountId);
     if (!this.isOnline()) {
       this.publish("offline");
+      if (!localPlan && !state.pendingDelete) {
+        throw new RemotePlanReadError(
+          "unavailable",
+          "当前离线，且此设备还没有该账户的计划缓存。请联网后重试。",
+        );
+      }
       return localPlan;
     }
 

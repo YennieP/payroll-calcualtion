@@ -25,7 +25,7 @@ The repository root [`AGENTS.md`](../../AGENTS.md) is the entry point for agents
 - Visual baseline: the user-approved browser-width responsive three-column layout with pinned home, category view, persistent income panel, and seven themes; panels stack at 900 px and below.
 - Typography: the final eleven-family theme mapping in `development-constraints.md` and its required glyph coverage must be preserved; Blue Midnight numbers use DM Serif Display.
 - Tax scope: California W-2 planning estimate with supported filing statuses and explicit rule-year metadata.
-- Active milestone: Phase 7.1 cross-phase stabilization. Phase 8 release work is blocked until its data-integrity, offline/PWA, validation, and regression items pass.
+- Active milestone: Phase 7.1 cross-phase stabilization is complete. Phase 8 release work may start only after explicit user authorization; production Firebase, deployment, and physical-device acceptance have not started.
 
 ## Document update policy
 

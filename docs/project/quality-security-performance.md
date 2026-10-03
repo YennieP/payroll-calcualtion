@@ -39,6 +39,12 @@ fail-closed 边界：
 空白的 canonical JSON 并重新验证计划。持久层仍需独立复核同一契约，确保绕过 UI 的写入不能进入
 IndexedDB 或 Firestore。该变更不修改 schema 字段，所以 `schemaVersion` 继续为 1。
 
+容量校验会用 `Number.MAX_SAFE_INTEGER` 的 revision 位数计算持久化 envelope；因此一份刚好通过
+Domain 的计划在 9→10 或后续 revision 增长时仍可保存，不会到 Repository 才失败。上线前旧版本若已
+留下不符合当前契约的 schema-v1 记录，客户端必须 fail closed：不自动覆盖或删除本机/云端原文，先让
+已授权用户导出原始 JSON。本机记录只能在用户明确确认后清理；云端记录保持原状，待人工修复后重试，
+或退出并清理本机私人缓存。当前尚无生产 Firebase 数据，因此不需要破坏性批量迁移。
+
 ## 3. 前端性能预算
 
 生产构建采用以下 fail-closed 上限：

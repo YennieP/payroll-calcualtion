@@ -1,7 +1,8 @@
-/* global axe, document, getComputedStyle, requestAnimationFrame, window */
+/* global axe, document, getComputedStyle, indexedDB, requestAnimationFrame, window */
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -176,6 +177,69 @@ async function assertFiftyGoalFixture(page) {
   if (goalCount !== 50) throw new Error(`Expected to traverse 50 goals, found ${goalCount}.`);
 }
 
+async function readLocalPlanRecord(page, accountId) {
+  return page.evaluate(
+    ({ databaseName, databaseVersion, storeName, key }) =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open(databaseName, databaseVersion);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed."));
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction(storeName, "readonly");
+          const read = transaction.objectStore(storeName).get(key);
+          read.onerror = () => reject(read.error ?? new Error("IndexedDB read failed."));
+          read.onsuccess = () => resolve(read.result ?? null);
+          transaction.oncomplete = () => database.close();
+          transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB failed."));
+        };
+      }),
+    {
+      databaseName: "worthwhile-plans",
+      databaseVersion: 2,
+      storeName: "plans",
+      key: accountId,
+    },
+  );
+}
+
+async function seedIncompatibleLocalPlan(page) {
+  return page.evaluate(
+    ({ databaseName, databaseVersion, storeName, key }) =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open(databaseName, databaseVersion);
+        request.onerror = () => reject(request.error ?? new Error("IndexedDB open failed."));
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction(storeName, "readwrite");
+          const store = transaction.objectStore(storeName);
+          const read = store.get(key);
+          read.onerror = () => reject(read.error ?? new Error("IndexedDB read failed."));
+          read.onsuccess = () => {
+            const stored = read.result;
+            if (!stored?.plan?.categories?.[0]?.goals?.[0]) {
+              reject(new Error("Expected the anonymous sample plan in IndexedDB."));
+              return;
+            }
+            stored.plan.categories[0].goals[0].monthlyAmountCents = 50_000_001;
+            const recoveryJson = JSON.stringify(stored.plan);
+            store.put(stored);
+            transaction.oncomplete = () => {
+              database.close();
+              resolve(recoveryJson);
+            };
+          };
+          transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB failed."));
+        };
+      }),
+    {
+      databaseName: "worthwhile-plans",
+      databaseVersion: 2,
+      storeName: "plans",
+      key: "anonymous-local",
+    },
+  );
+}
+
 const executablePath = findChrome();
 if (!executablePath) {
   console.error(
@@ -336,6 +400,50 @@ try {
   await keyboardPage.locator('.planner-app[data-theme="midnight"]').waitFor();
   await keyboardPage.close();
 
+  const recoveryContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const recoveryPage = await recoveryContext.newPage();
+  recoveryPage.on("console", (message) => consoleMessages.push(message.text()));
+  recoveryPage.on("pageerror", (error) => pageErrors.push(error.message));
+  recoveryPage.on("requestfailed", (request) => failedRequests.push(request.url()));
+  await recoveryPage.goto(appUrl, { waitUntil: "networkidle" });
+  await waitForSaved(recoveryPage);
+  const recoveryJson = await seedIncompatibleLocalPlan(recoveryPage);
+  await recoveryPage.reload({ waitUntil: "networkidle" });
+  await recoveryPage
+    .getByRole("heading", { name: "本机计划需要恢复" })
+    .waitFor({ timeout: 30_000 });
+  if (
+    await recoveryPage
+      .getByRole("heading", { name: "已置顶" })
+      .isVisible()
+      .catch(() => false)
+  ) {
+    throw new Error("An incompatible IndexedDB plan rendered as an editable plan.");
+  }
+  const preserved = await readLocalPlanRecord(recoveryPage, "anonymous-local");
+  if (JSON.stringify(preserved?.plan) !== recoveryJson) {
+    throw new Error("The incompatible IndexedDB record changed before explicit cleanup.");
+  }
+  const [download] = await Promise.all([
+    recoveryPage.waitForEvent("download"),
+    recoveryPage.getByRole("button", { name: "导出原始计划 JSON" }).click(),
+  ]);
+  const downloadPath = await download.path();
+  if (!downloadPath || (await readFile(downloadPath, "utf8")) !== recoveryJson) {
+    throw new Error("The recovery download did not preserve the original IndexedDB plan JSON.");
+  }
+  await recoveryPage.addScriptTag({ path: axePath });
+  await runAccessibilityAudit(recoveryPage, "incompatible local-plan recovery gate");
+  await assertLayout(recoveryPage, "390x844 incompatible local-plan recovery gate");
+  await recoveryPage.getByRole("button", { name: "清除此设备副本并继续" }).click();
+  await recoveryPage.getByRole("heading", { name: "已置顶" }).waitFor({ timeout: 30_000 });
+  await waitForSaved(recoveryPage);
+  const recovered = await readLocalPlanRecord(recoveryPage, "anonymous-local");
+  if (recovered?.plan?.categories?.[0]?.goals?.[0]?.monthlyAmountCents !== 320_000) {
+    throw new Error("Explicit local recovery did not replace the incompatible record safely.");
+  }
+  await recoveryContext.close();
+
   mkdirSync(join(root, "test-results"), { recursive: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await assertLayout(page, "final desktop screenshot");
@@ -380,7 +488,7 @@ try {
   }
 
   console.log(
-    "Quality browser check passed: 50 goals, three empty states, 120-character labels, a $500,000 monthly boundary with recoverable rejection, seven-theme WCAG scans, keyboard focus, and 320–2000px layouts.",
+    "Quality browser check passed: 50 goals, three empty states, 120-character labels, a $500,000 monthly boundary with recoverable rejection, non-destructive IndexedDB recovery, seven-theme WCAG scans, keyboard focus, and 320–2000px layouts.",
   );
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

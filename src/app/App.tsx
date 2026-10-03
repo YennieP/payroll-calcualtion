@@ -14,7 +14,10 @@ import { AccountControl, type SignOutStrategy } from "../features/auth/AccountCo
 import { Planner } from "../features/planner/Planner";
 import type { Account, AuthProvider } from "../ports/AuthProvider";
 import type { CloudRuntime } from "../ports/CloudRuntime";
-import type { LocalPlanSyncRepository } from "../ports/LocalPlanSyncRepository";
+import {
+  LocalPlanRecoveryError,
+  type LocalPlanSyncRepository,
+} from "../ports/LocalPlanSyncRepository";
 import type { PlanRepository } from "../ports/PlanRepository";
 import { RemotePlanReadError, type RemotePlanReadErrorKind } from "../ports/RemotePlanRepository";
 import { appReducer, createInitialAppState } from "./appReducer";
@@ -48,6 +51,9 @@ interface CloudPreparation {
   preloadedPlan: PlanDocument | null;
   message: string | null;
   errorKind: RemotePlanReadErrorKind | null;
+  recoveryJson: string | null;
+  recoverySource: "local" | "remote" | null;
+  recoveryAccountId: string | null;
 }
 
 interface AuthSession {
@@ -88,6 +94,46 @@ function createPersistentDeviceId(): string {
   }
 }
 
+function downloadRecoveryJson(source: string) {
+  const blob = new Blob([source], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `worthwhile-recovery-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function PlanRecoveryGate({
+  message,
+  recoveryJson,
+  busy,
+  onClear,
+}: {
+  message: string;
+  recoveryJson: string;
+  busy: boolean;
+  onClear: () => Promise<void>;
+}) {
+  return (
+    <div className="planner-stage session-gate" data-theme="rouge">
+      <section className="session-gate-card" role="alert" aria-label="恢复本机计划">
+        <span>WORTHWHILE · RECOVERY</span>
+        <h1>本机计划需要恢复</h1>
+        <p>{message} 清理前，原始记录会完整保留在 IndexedDB 中。</p>
+        <div>
+          <button type="button" disabled={busy} onClick={() => downloadRecoveryJson(recoveryJson)}>
+            导出原始计划 JSON
+          </button>
+          <button type="button" disabled={busy} onClick={() => void onClear()}>
+            清除此设备副本并继续
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PlannerSession({
   repository,
   accountId,
@@ -104,6 +150,8 @@ function PlannerSession({
     createInitialAppState(createSamplePlan(deviceId), deviceId),
   );
   const [isOnline, setIsOnline] = useState(() => globalThis.navigator?.onLine ?? true);
+  const [localRecovery, setLocalRecovery] = useState<LocalPlanRecoveryError | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const loadStarted = useRef(false);
   const active = useRef(true);
   const cloudFlushTimer = useRef<number | null>(null);
@@ -161,12 +209,16 @@ function PlannerSession({
           isNew: stored === null,
         }),
       )
-      .catch((error: unknown) =>
+      .catch((error: unknown) => {
+        if (error instanceof LocalPlanRecoveryError) {
+          setLocalRecovery(error);
+          return;
+        }
         dispatch({
           type: "storage-failed",
           message: error instanceof Error ? error.message : "未知 IndexedDB 错误。",
-        }),
-      );
+        });
+      });
   }, [accountId, deviceId, hasPreloadedPlan, preloadedPlan, repository]);
 
   useEffect(
@@ -337,6 +389,32 @@ function PlannerSession({
     await onSignOut(strategy);
   };
 
+  const clearLocalRecovery = async () => {
+    if (!localRecovery) return;
+    setRecoveryBusy(true);
+    try {
+      await repository.delete(accountId);
+      const startingPlan = createSamplePlan(deviceId);
+      await repository.replace(accountId, startingPlan);
+      persistedRevision.current = startingPlan.revision;
+      dispatch({ type: "plan-loaded", plan: startingPlan, isNew: false });
+      setLocalRecovery(null);
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+
+  if (localRecovery) {
+    return (
+      <PlanRecoveryGate
+        message={localRecovery.message}
+        recoveryJson={localRecovery.recoveryJson}
+        busy={recoveryBusy}
+        onClear={clearLocalRecovery}
+      />
+    );
+  }
+
   const accountControl = (
     <AccountControl
       provider={authProvider}
@@ -371,6 +449,8 @@ function SessionGate({
   onImport,
   onSkip,
   onRetry,
+  onExportRecovery,
+  onClearRecovery,
   onDiscardAndSignOut,
 }: {
   account: Account;
@@ -379,6 +459,8 @@ function SessionGate({
   onImport: () => Promise<void>;
   onSkip: () => void;
   onRetry: () => void;
+  onExportRecovery: () => void;
+  onClearRecovery: () => Promise<void>;
   onDiscardAndSignOut: () => Promise<void>;
 }) {
   return (
@@ -386,15 +468,17 @@ function SessionGate({
       <section className="session-gate-card" role="dialog" aria-label="准备跨设备同步">
         <span>WORTHWHILE · CLOUD</span>
         <h1>
-          {preparation.status === "import-offer"
-            ? "导入这台设备的计划？"
-            : preparation.status === "error" && preparation.errorKind === "corrupt"
-              ? "云端计划需要处理"
-              : preparation.status === "error" && preparation.errorKind === "unavailable"
-                ? "云端暂时无法读取"
-                : preparation.status === "error"
-                  ? "同步准备失败"
-                  : "正在准备同步"}
+          {preparation.recoverySource === "local"
+            ? "本机计划需要恢复"
+            : preparation.status === "import-offer"
+              ? "导入这台设备的计划？"
+              : preparation.status === "error" && preparation.errorKind === "corrupt"
+                ? "云端计划需要处理"
+                : preparation.status === "error" && preparation.errorKind === "unavailable"
+                  ? "云端暂时无法读取"
+                  : preparation.status === "error"
+                    ? "同步准备失败"
+                    : "正在准备同步"}
         </h1>
         <p>
           {preparation.status === "import-offer"
@@ -413,9 +497,27 @@ function SessionGate({
         ) : null}
         {preparation.status === "error" ? (
           <div>
-            <button type="button" disabled={busy} onClick={onRetry}>
-              重新读取云端计划
-            </button>
+            {preparation.recoverySource === "local" && preparation.recoveryJson ? (
+              <>
+                <button type="button" disabled={busy} onClick={onExportRecovery}>
+                  导出原始计划 JSON
+                </button>
+                <button type="button" disabled={busy} onClick={() => void onClearRecovery()}>
+                  清除此设备副本并重新读取
+                </button>
+              </>
+            ) : (
+              <>
+                {preparation.recoverySource === "remote" && preparation.recoveryJson ? (
+                  <button type="button" disabled={busy} onClick={onExportRecovery}>
+                    导出云端原始计划 JSON
+                  </button>
+                ) : null}
+                <button type="button" disabled={busy} onClick={onRetry}>
+                  重新读取云端计划
+                </button>
+              </>
+            )}
             <button type="button" disabled={busy} onClick={() => void onDiscardAndSignOut()}>
               放弃此账户的本机缓存并退出
             </button>
@@ -557,8 +659,25 @@ export function App({
   useEffect(() => {
     if (!account || !syncedRepository) return;
     let cancelled = false;
-    Promise.all([syncedRepository.load(account.id), localRepository.load(LOCAL_ACCOUNT_ID)]).then(
-      ([accountPlan, anonymousPlan]) => {
+    void (async () => {
+      let recoveryAccountId: string | null = null;
+      try {
+        let accountPlan: PlanDocument | null;
+        try {
+          accountPlan = await syncedRepository.load(account.id);
+        } catch (error: unknown) {
+          if (error instanceof LocalPlanRecoveryError) recoveryAccountId = account.id;
+          throw error;
+        }
+
+        let anonymousPlan: PlanDocument | null;
+        try {
+          anonymousPlan = await localRepository.load(LOCAL_ACCOUNT_ID);
+        } catch (error: unknown) {
+          if (error instanceof LocalPlanRecoveryError) recoveryAccountId = LOCAL_ACCOUNT_ID;
+          throw error;
+        }
+
         if (cancelled) return;
         setPreparationResult({
           accountId: account.id,
@@ -567,9 +686,11 @@ export function App({
           preloadedPlan: accountPlan,
           message: null,
           errorKind: null,
+          recoveryJson: null,
+          recoverySource: null,
+          recoveryAccountId: null,
         });
-      },
-      (error: unknown) => {
+      } catch (error: unknown) {
         if (cancelled) return;
         setPreparationResult({
           accountId: account.id,
@@ -578,9 +699,20 @@ export function App({
           preloadedPlan: null,
           message: error instanceof Error ? error.message : "无法准备同步。",
           errorKind: error instanceof RemotePlanReadError ? error.kind : null,
+          recoveryJson:
+            error instanceof LocalPlanRecoveryError || error instanceof RemotePlanReadError
+              ? error.recoveryJson
+              : null,
+          recoverySource:
+            error instanceof LocalPlanRecoveryError
+              ? "local"
+              : error instanceof RemotePlanReadError && error.recoveryJson
+                ? "remote"
+                : null,
+          recoveryAccountId,
         });
-      },
-    );
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -596,6 +728,9 @@ export function App({
           preloadedPlan: null,
           message: null,
           errorKind: null,
+          recoveryJson: null,
+          recoverySource: null,
+          recoveryAccountId: null,
         }
     : null;
 
@@ -690,6 +825,19 @@ export function App({
           onRetry={() => {
             setPreparationResult(null);
             setPreparationAttempt((attempt) => attempt + 1);
+          }}
+          onExportRecovery={() => {
+            if (preparation.recoveryJson) downloadRecoveryJson(preparation.recoveryJson);
+          }}
+          onClearRecovery={async () => {
+            setGateBusy(true);
+            try {
+              await localRepository.delete(preparation.recoveryAccountId ?? account.id);
+              setPreparationResult(null);
+              setPreparationAttempt((attempt) => attempt + 1);
+            } finally {
+              setGateBusy(false);
+            }
           }}
           onDiscardAndSignOut={signOut}
         />

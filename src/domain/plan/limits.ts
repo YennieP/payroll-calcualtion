@@ -4,6 +4,7 @@ export const MAX_PLAN_CATEGORIES = 50;
 export const MAX_GOALS_PER_CATEGORY = 200;
 export const MAX_PLAN_GOALS = 500;
 export const MAX_PLAN_UTF8_BYTES = 256 * 1024;
+export const MAX_PLAN_REVISION = Number.MAX_SAFE_INTEGER;
 export const MAX_MONTHLY_GOAL_AMOUNT_CENTS = 50_000_000;
 export const MAX_MONTHLY_PRETAX_DEDUCTION_CENTS = 50_000_000;
 export const MAX_MONTHLY_GOAL_TOTAL_CENTS = 100_000_000;
@@ -31,6 +32,13 @@ export function getSerializedPlanByteLength(value: unknown): number {
   } catch {
     return Number.POSITIVE_INFINITY;
   }
+}
+
+export function getPlanPersistenceByteLength(value: unknown): number {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return getSerializedPlanByteLength(value);
+  }
+  return getSerializedPlanByteLength({ ...value, revision: MAX_PLAN_REVISION });
 }
 
 export function countPlanGoals(plan: Pick<PlanDocument, "categories">): number {

@@ -6,6 +6,7 @@ import type {
   LocalPlanSyncSnapshot,
   PlanSyncState,
 } from "../../ports/LocalPlanSyncRepository";
+import { LocalPlanRecoveryError } from "../../ports/LocalPlanSyncRepository";
 import type { PlanChange, SaveResult } from "../../ports/PlanRepository";
 
 const DEFAULT_DATABASE_NAME = "worthwhile-plans";
@@ -55,8 +56,18 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
 }
 
 function normalizeStored(stored: StoredPlanSync | undefined): LocalPlanSyncSnapshot {
+  let plan: PlanDocument | null = null;
+  if (stored?.plan) {
+    try {
+      plan = migratePlanDocument(stored.plan);
+    } catch (error: unknown) {
+      const recoveryJson = JSON.stringify(stored.plan);
+      if (typeof recoveryJson !== "string") throw error;
+      throw new LocalPlanRecoveryError(recoveryJson, { cause: error });
+    }
+  }
   return {
-    plan: stored?.plan ? migratePlanDocument(stored.plan) : null,
+    plan,
     syncState: stored?.syncState ? { ...stored.syncState } : null,
   };
 }

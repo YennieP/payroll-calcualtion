@@ -104,6 +104,11 @@ export function AccountControl({
 
   const requiresSignOutChoice =
     account !== null && (saveStatus !== "saved" || sync?.status !== "synced");
+  const controlLabel = account
+    ? (account.email ?? "同步账户")
+    : provider
+      ? "跨设备同步"
+      : "本机计划";
 
   const exportPlan = () => {
     setDataMessage(null);
@@ -156,12 +161,13 @@ export function AccountControl({
       <button
         className="compact-control"
         type="button"
+        aria-label={controlLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
         <span aria-hidden="true">◎</span>
-        <b>{account ? (account.email ?? "同步账户") : provider ? "跨设备同步" : "本机计划"}</b>
+        <b>{controlLabel}</b>
         <span aria-hidden="true">⌄</span>
       </button>
       {open ? (

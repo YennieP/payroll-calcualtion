@@ -25,6 +25,7 @@ export {
 export { CURRENT_PLAN_SCHEMA_VERSION } from "./types";
 export {
   countPlanGoals,
+  getPlanPersistenceByteLength,
   getSerializedPlanByteLength,
   MAX_GOALS_PER_CATEGORY,
   MAX_MONTHLY_GOAL_AMOUNT_CENTS,
@@ -32,6 +33,7 @@ export {
   MAX_MONTHLY_PRETAX_DEDUCTION_CENTS,
   MAX_PLAN_CATEGORIES,
   MAX_PLAN_GOALS,
+  MAX_PLAN_REVISION,
   MAX_PLAN_UTF8_BYTES,
   serializePlanDocument,
   utf8ByteLength,

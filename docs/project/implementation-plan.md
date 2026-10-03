@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成           | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成           | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成           | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 7.1 进行中 | S1–S7 已完成；下一项为 S8 权威跨阶段门禁与最终复核，Phase 8 继续阻断。                      |
+| 产品实现     | Phase 7.1 已完成 | S1–S8 已完成并通过权威本地门禁；下一项是在用户授权后进入 Phase 8 发布。                     |
 | 部署         | 未开始           | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -195,7 +195,7 @@ React PWA
 
 ## Phase 7.1 — 修复跨阶段集成问题
 
-状态：进行中。S1–S7 已于 2026-10-02 完成并通过完整门禁；下一项为 S8。Phase 8 在本阶段全部退出条件满足前保持阻断。
+状态：已于 2026-10-02 完成。S1–S8 已通过完整本地门禁；Phase 8 可在用户明确授权后开始。
 
 ### 执行协议
 
@@ -214,7 +214,34 @@ React PWA
 - [x] **S5 — 修正字体离线就绪与缓存升级（高优先级）**：区分应用外壳可离线和全部七主题字体已缓存；warmup 失败可重试；缓存和资产清单由内容版本驱动并清理旧版本。覆盖 warmup 完成前断网、失败重试及字体版本升级。
 - [x] **S6 — 建立计划容量与金额范围契约（高优先级）**：为分类/目标数量、UTF-8 序列化大小、单项与聚合金额设置 Domain、导入、UI 和 Repository 一致的边界；在 Firestore 1 MiB 和税务求解上限前给出可恢复提示，不允许渲染期 `RangeError` 崩溃。
 - [x] **S7 — 对齐 Firestore Rules 与加载错误语义（中优先级）**：收紧可由 Rules 表达的嵌套字段、枚举和数量约束，包括 S6 已固定的分类/目标数量与金额边界；明确区分云端不存在、暂时不可用和数据损坏，来自云端的 S6 超限文档应归入数据损坏而非暂时失败；adapter 的首次读取和订阅解析失败都必须进入受控错误状态。增加恶意嵌套/超限数据、首次读取失败和订阅期间暂时失败测试。
-- [ ] **S8 — 扩充跨阶段权威门禁并最终复核（收口）**：把 S1–S7 的真实 Repository、Firebase Emulator、双浏览器、PWA/字体升级和异常注入场景纳入 `npm run verify`，并保留 S3 的 StrictMode 生命周期重放、旧 flush/新编辑交叠、PWA 更新卸载和账户切换回归，以及 S6 的精确容量边界、超限 UI 回退、安全退出导出和 adapter 拒绝回归；新增 S7 首次读取失败/重试、有缓存降级、订阅错误和 Rules 绕过后的深层损坏 fail-closed 浏览器/集成回归；重新判定预发布 schema v1 超限数据的兼容策略与 revision 位数增长时的可持续编辑/UI 回退。重新审阅 Phase 1–7 的退出条件和发布验收清单，并确认没有遗留跨阶段冲突。
+- [x] **S8 — 扩充跨阶段权威门禁并最终复核（收口）**：把 S1–S7 的真实 Repository、Firebase Emulator、双浏览器、PWA/字体升级和异常注入场景纳入 `npm run verify`，并保留 S3 的 StrictMode 生命周期重放、旧 flush/新编辑交叠、PWA 更新卸载和账户切换回归，以及 S6 的精确容量边界、超限 UI 回退、安全退出导出和 adapter 拒绝回归；新增 S7 首次读取失败/重试、有缓存降级、订阅错误和 Rules 绕过后的深层损坏 fail-closed 浏览器/集成回归；重新判定预发布 schema v1 超限数据的兼容策略与 revision 位数增长时的可持续编辑/UI 回退。重新审阅 Phase 1–7 的退出条件和发布验收清单，并确认没有遗留跨阶段冲突。
+
+### S8 权威门禁覆盖矩阵
+
+| 风险单元            | `npm run verify` 中的权威证据                                                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1 删除与 revision  | `SyncedPlanRepository.test.ts` 覆盖离线删除、重开、传播、重建和 stale 客户端；Firebase Emulator 验证 tombstone/单调 revision；双浏览器脚本验证删除传播及更高 revision 重建。                             |
+| S2 本地原子性       | `LocalPlanSyncRepository.test.ts` 使用真实 IndexedDB API 模型覆盖 v1→v2 迁移、计划/同步状态序列化失败、保存/删除事务中断及同步确认竞态。                                                                 |
+| S3 即时本地保存     | `App.test.tsx` 覆盖 StrictMode 重放、PWA 更新卸载和账户切换；`SyncedPlanRepository.test.ts` 覆盖旧 flush/新编辑交叠；PWA 浏览器脚本验证离线重开后编辑仍在。                                              |
+| S4 认证与安全退出   | `App.test.tsx` 和 `AccountControl.test.tsx` 覆盖认证恢复、pending/error/offline/conflict、认证失败和清理重试；Firebase 浏览器脚本在手机宽度注入真实 IndexedDB 清理失败，验证阻断、键盘重试和不再可编辑。 |
+| S5 字体缓存         | `fontLoader`/`PwaStatus` 测试覆盖状态与失败重试；字体浏览器脚本覆盖 warmup 中断网、部分失败后重试、内容摘要版本、complete marker、旧缓存清理和服务器关闭后的七主题字体恢复。                             |
+| S6 容量与金额       | Domain、导入、Repository、同步和 App 测试覆盖精确/超限边界与 UI 回退；质量浏览器脚本验证 `$500,000/$500,001`；Firebase adapter 在事务前拒绝超限计划。                                                    |
+| S7 Rules 与读取语义 | 同步/App 测试覆盖 missing、unavailable、corrupt、缓存降级和订阅错误；Emulator 绕过 Rules 注入深层损坏；Firebase 浏览器脚本验证无缓存时 fail closed、原始 JSON 导出及修复后重试。                         |
+| S8 兼容收口         | 计划大小按 `Number.MAX_SAFE_INTEGER` revision 预留空间，Domain 批准后可跨 9→10 保存；旧 schema v1 本地记录不覆盖不删除并可原样导出，云端损坏记录同样可导出且不会被客户端自动改写。                       |
+
+### Phase 1–7 退出条件复核
+
+| Phase | 复核结论与门禁                                                                                                                                       |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | 工程、严格 TypeScript、Lint、格式、生产构建、Pages base path、文档和架构边界均由本地 `verify` 固定检查；无 GitHub Actions workflow。                 |
+| 2     | 领域/schema/迁移/selectors 与 2026 联邦、工资税、California proxy 的边界和反推求解均有纯 TypeScript 测试；Domain 无 React/Firebase/浏览器依赖。      |
+| 3     | 置顶、分类、目标、搜索、税务资料、50 项渐进展开、即时派生值和 IndexedDB 持久化均有组件、Domain、Repository 及真实浏览器证据；无 Firebase 时可用。    |
+| 4     | 七主题、11 个字体家族、582 个 WOFF2、完整 glyph、主题数据隔离和 320–2000px 无越界由静态与真实浏览器门禁覆盖。                                        |
+| 5     | Manifest、安装性、Service Worker 更新控制、两次离线重开/编辑、字体缓存版本升级和移动安全区由产物、组件及真实 Chrome 门禁覆盖。                       |
+| 6     | 邮箱认证、首次导入、新设备下载、离线同步、冲突、删除、退出清理和跨用户隔离由端口测试、Emulator 及独立桌面/手机上下文覆盖。                           |
+| 7     | 单元/集成/Rules/浏览器/无障碍、性能与隐私预算、Spark 容量模型、七主题极端内容和键盘路径已全部进入 `verify`；实体设备与生产环境验收仍只属于 Phase 8。 |
+
+复核未发现需要回滚 S1–S7 或改变架构/产品范围的冲突。唯一文档漂移是根 `README.md`、`scripts/README.md` 和 `tests/README.md` 仍描述早期阶段，S8 已同步为当前实现与权威本地门禁。生产部署、真实 Firebase 授权域名、iOS Safari/Android Chrome 实体设备和最终生产人工验收继续留在 Phase 8。
 
 退出条件：
 
@@ -245,15 +272,15 @@ React PWA
 
 ## 发布验收清单
 
-- [ ] 同一账号的手机端和电脑端数据保持一致，包括删除与删除后重建。
-- [ ] 离线修改和离线删除能够保留，并在恢复网络后正确同步。
-- [ ] revision/generation 冲突可见且可恢复，stale 客户端不能静默覆盖新计划。
+- [x] 同一账号的手机端和电脑端数据保持一致，包括删除与删除后重建。
+- [x] 离线修改和离线删除能够保留，并在恢复网络后正确同步。
+- [x] revision/generation 冲突可见且可恢复，stale 客户端不能静默覆盖新计划。
 - [x] 50 项目标仍然整洁、可操作。
 - [x] 置顶、分类、搜索和税务资料流程端到端可用。
 - [x] 所有相关输入都会更新收入结果。
 - [x] 7 套主题不改变数据并使用预期字体。
-- [ ] 七主题字体的离线就绪、失败重试和版本升级状态与实际缓存一致。
-- [ ] PWA 可以安装并离线重新打开。
+- [x] 七主题字体的离线就绪、失败重试和版本升级状态与实际缓存一致。
+- [x] PWA 可以安装并离线重新打开。
 - [x] Firestore Rules 阻止跨用户访问。
 - [x] 税务数据年份和限制清晰可见。
 - [x] 不需要或启用任何付费服务。
@@ -275,6 +302,22 @@ React PWA
 11. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-02 — 完成 Phase 7.1 S8 权威跨阶段门禁与最终复核
+
+- 建立 S1–S8 到 `npm run verify` 的双语覆盖矩阵，并逐条复核 Phase 1–7 退出条件与发布清单；未发现需要回滚既有阶段或改变产品/架构范围的跨阶段冲突。修正根 `README.md`、`scripts/README.md` 和 `tests/README.md` 的早期状态漂移。
+- 计划容量现在按 `Number.MAX_SAFE_INTEGER` 的 revision 位数预留持久化空间；精确边界可跨 9→10 保存，不再出现 Domain 接受、Repository 才失败的断层。旧 schema-v1 超限本机记录不会被自动覆盖或删除，用户可先原样导出再明确清理；登录准备阶段会精确清理发生问题的账户或匿名记录，不会误删另一份有效缓存。
+- 云端深层损坏同样 fail closed：Firebase adapter 保留可序列化原文供已登录用户导出，客户端不自动覆盖/删除 Firestore 记录，修复后可重试。登录账户在离线且没有本机缓存时不再被误判为“云端为空”。
+- 真实 Chrome 门禁新增旧 IndexedDB 数据导出/清理、Rules 绕过后的超限云端文档导出/修复、真实 IndexedDB 清理失败与键盘重试；复核过程中修复了手机宽度隐藏按钮文字后账户控件缺少稳定无障碍名称的问题。
+- 最终 `npm run verify` 全绿：19 个文件 120 项单元/组件/Repository 测试、11 个字体家族 582 个 WOFF2、生产构建与预算、PWA 两轮离线重开、七主题字体/缓存、320–2000px 极端内容/WCAG/键盘、8 项 Firebase Emulator 测试及独立桌面/手机同步全部通过。
+- Phase 7.1 已完成。未连接生产 Firebase、未部署、未启用计费、未增加 GitHub Actions；实体 iOS Safari/Android Chrome、生产授权域名与最终生产人工验收仍属于 Phase 8。本轮尚未 commit 或 push。
+
+### 2026-10-02 — 启动 Phase 7.1 S8 权威跨阶段门禁与最终复核
+
+- S6–S7 已作为 commit `466fe80` 推送到 `origin/main`；提交前完整 `npm run verify` 通过，本地与远端 `main` SHA 一致，S8 从干净工作区开始。
+- S8 先建立 S1–S7 验收场景到 `npm run verify` 实际步骤的覆盖矩阵，再补齐只存在于 unit fake、尚未进入真实 IndexedDB/Firebase Emulator/Chrome 路径的关键故障注入；保留既有 PWA、七主题、11 个字体家族与双设备同步覆盖，不改变已验收 UI 或产品范围。
+- 本轮必须关闭 S7 复核留下的两个容量风险：为上线前可能存在的旧 schema v1 超限本地/云端数据提供明确的非破坏恢复策略，并保证精确容量边界不会因 revision 位数增长而在 Repository 阶段才失败且留下不可恢复 UI 状态。完成后逐条重审 Phase 1–7 退出条件与 Phase 8 发布清单。
+- 自动 GitHub Actions 保持禁用；不连接生产 Firebase、不部署、不启用计费。S8 完成前 Phase 8 继续阻断，本轮未经另行授权不 commit 或 push。
 
 ### 2026-10-02 — 完成 Phase 7.1 S7 Firestore Rules 与云端加载错误语义修复
 
@@ -522,14 +565,14 @@ Last updated: 2026-10-02
 
 ## Current status
 
-| Area                   | Status           | Evidence or next action                                                                                        |
-| ---------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| MVP product scope      | Complete         | California planning, 50-goal information architecture, and non-goals are agreed.                               |
-| Visual direction       | Complete         | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
-| Architecture           | Complete         | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
-| Repository governance  | Complete         | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 7.1 active | S1–S7 are complete; S8 authoritative cross-phase coverage and final re-audit are next, and Phase 8 is blocked. |
-| Deployment             | Not started      | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
+| Area                   | Status             | Evidence or next action                                                                                        |
+| ---------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete           | California planning, 50-goal information architecture, and non-goals are agreed.                               |
+| Visual direction       | Complete           | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
+| Architecture           | Complete           | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
+| Repository governance  | Complete           | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
+| Product implementation | Phase 7.1 complete | S1–S8 passed the authoritative local gate; Phase 8 release work may start after explicit user approval.        |
+| Deployment             | Not started        | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
 
 ## Architecture baseline
 
@@ -711,7 +754,7 @@ Exit criteria:
 
 ## Phase 7.1 — Resolve cross-phase integration gaps
 
-Status: In progress. S1–S7 passed the complete gate on 2026-10-02, and S8 is next. Phase 8 stays blocked until every exit criterion below is satisfied.
+Status: Completed on 2026-10-02. S1–S8 passed the complete local gate; Phase 8 may start after explicit user approval.
 
 ### Execution protocol
 
@@ -730,7 +773,34 @@ Status: In progress. S1–S7 passed the complete gate on 2026-10-02, and S8 is n
 - [x] **S5 — Correct font offline readiness and cache upgrades (high)**: distinguish shell readiness from complete seven-theme font caching; retry failed warmup; version caches and manifests by content and remove obsolete versions. Cover going offline before warmup completes, retry after failure, and font-version upgrades.
 - [x] **S6 — Establish plan-capacity and money-range contracts (high)**: align Domain, import, UI, and Repository limits for category/goal counts, UTF-8 serialized bytes, individual values, and aggregates. Surface recoverable messages before Firestore's 1 MiB limit or the tax solver ceiling; rendering must not crash with `RangeError`.
 - [x] **S7 — Align Firestore Rules and cloud-load error semantics (medium)**: tighten nested fields, enums, and count limits that Rules can express, including S6's fixed category/goal counts and money boundaries; distinguish missing, temporarily unavailable, and corrupt cloud data, treating an S6-limit violation received from the cloud as corrupt data rather than a transient failure; route both initial-load and subscription parse failures into a controlled error state. Add malformed nested/over-limit data, initial-load failure, and subscription-time transient-failure tests.
-- [ ] **S8 — Expand the authoritative cross-phase gate and re-audit (closeout)**: add S1–S7 scenarios to real Repository, Firebase Emulator, two-browser, PWA/font-upgrade, and failure-injection coverage under `npm run verify`, retaining S3's StrictMode replay, older-flush/newer-edit overlap, PWA-update unmount, and account-switch regressions plus S6's exact capacity boundaries, over-limit UI rollback, safe-sign-out export, and adapter rejection regressions; add S7 browser/integration regressions for initial-load failure/retry, cached fallback, subscription errors, and deep corrupt-data fail-closed behavior after a Rules bypass; re-decide compatibility for pre-release over-limit schema-v1 data and sustainable edit/UI rollback when an exact 256 KiB plan crosses a revision digit boundary. Re-review every Phase 1–7 exit criterion and the release checklist, with no unresolved cross-phase conflict.
+- [x] **S8 — Expand the authoritative cross-phase gate and re-audit (closeout)**: add S1–S7 scenarios to real Repository, Firebase Emulator, two-browser, PWA/font-upgrade, and failure-injection coverage under `npm run verify`, retaining S3's StrictMode replay, older-flush/newer-edit overlap, PWA-update unmount, and account-switch regressions plus S6's exact capacity boundaries, over-limit UI rollback, safe-sign-out export, and adapter rejection regressions; add S7 browser/integration regressions for initial-load failure/retry, cached fallback, subscription errors, and deep corrupt-data fail-closed behavior after a Rules bypass; re-decide compatibility for pre-release over-limit schema-v1 data and sustainable edit/UI rollback when an exact 256 KiB plan crosses a revision digit boundary. Re-review every Phase 1–7 exit criterion and the release checklist, with no unresolved cross-phase conflict.
+
+### S8 authoritative-gate coverage matrix
+
+| Risk unit                   | Authoritative evidence under `npm run verify`                                                                                                                                                                                                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1 deletion and revision    | `SyncedPlanRepository.test.ts` covers offline deletion, reopen, propagation, recreation, and a stale client; Firebase Emulator verifies tombstones and monotonic revisions; the two-browser script verifies deletion propagation and recreation at a higher revision.                                |
+| S2 local atomicity          | `LocalPlanSyncRepository.test.ts` uses the real IndexedDB API model for v1-to-v2 migration, plan/sync serialization failures, interrupted save/delete transactions, and acknowledgement races.                                                                                                       |
+| S3 immediate local save     | `App.test.tsx` covers StrictMode replay, PWA-update unmount, and account switching; `SyncedPlanRepository.test.ts` covers older-flush/newer-edit overlap; the PWA browser script verifies edits across offline reopens.                                                                              |
+| S4 auth and safe sign-out   | `App.test.tsx` and `AccountControl.test.tsx` cover auth restoration, pending/error/offline/conflict states, auth failure, and cleanup retry; the Firebase browser script injects a real IndexedDB cleanup failure at mobile width and verifies blocking, keyboard retry, and removal of editable UI. |
+| S5 font caching             | `fontLoader`/`PwaStatus` tests cover state and retry semantics; the font browser script covers pre-warmup offline state, partial-failure retry, content-digest versioning, the complete marker, obsolete-cache cleanup, and all seven themes after the server stops.                                 |
+| S6 capacity and money       | Domain, import, Repository, sync, and App tests cover exact/over-limit boundaries and UI rollback; the quality browser script verifies `$500,000/$500,001`; the Firebase adapter rejects an oversized plan before a transaction.                                                                     |
+| S7 Rules and read semantics | Sync/App tests cover missing, unavailable, corrupt, cached fallback, and subscription errors; Emulator tests bypass Rules to inject deep corruption; the Firebase browser script verifies fail-closed behavior without a cache, raw-JSON export, and retry after repair.                             |
+| S8 compatibility closeout   | Plan size reserves the `Number.MAX_SAFE_INTEGER` revision width so a Domain-approved plan saves across 9→10; an old schema-v1 local record remains untouched and exportable, while a corrupt cloud record is likewise exportable and never automatically rewritten by the client.                    |
+
+### Phase 1–7 exit-criteria re-audit
+
+| Phase | Result and gate                                                                                                                                                                                                                                        |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1     | The scaffold, strict TypeScript, lint, formatting, production build, Pages base path, documents, and architecture boundaries are fixed by local `verify`; no GitHub Actions workflow exists.                                                           |
+| 2     | Domain/schema/migration/selectors plus 2026 federal, payroll, California-proxy boundaries and reverse solving have pure-TypeScript tests; Domain has no React, Firebase, or browser dependency.                                                        |
+| 3     | Pinned, category, goal, search, tax-profile, 50-goal progressive disclosure, immediate derived values, and IndexedDB persistence have component, Domain, Repository, and real-browser evidence; the app works without Firebase.                        |
+| 4     | Seven themes, eleven families, 582 WOFF2 files, full glyph coverage, theme/data isolation, and 320–2000px overflow protection are covered by static and real-browser gates.                                                                            |
+| 5     | Manifest, installability, controlled Service Worker updates, two offline reopen/edit cycles, font-cache upgrades, and mobile safe areas are covered by artifact, component, and real-Chrome gates.                                                     |
+| 6     | Email auth, first import, new-device download, offline sync, conflicts, deletion, sign-out cleanup, and cross-user isolation are covered through ports, Emulator tests, and independent desktop/phone contexts.                                        |
+| 7     | Unit/integration/Rules/browser/accessibility gates, performance/privacy budgets, the Spark capacity model, seven-theme extreme content, and keyboard paths all run under `verify`; physical-device and production validation remain Phase 8 work only. |
+
+The re-audit found no conflict requiring an S1–S7 rollback or an architecture/product-scope change. The only documentation drift was that the root `README.md`, `scripts/README.md`, and `tests/README.md` still described earlier phases; S8 synchronizes them with the current implementation and authoritative local gate. Production deployment, real Firebase authorized domains, physical iOS Safari/Android Chrome, and final production acceptance remain explicitly in Phase 8.
 
 Exit criteria:
 
@@ -761,15 +831,15 @@ Exit criteria:
 
 ## Release acceptance checklist
 
-- [ ] Same-account phone and desktop data remain consistent, including deletion and recreation.
-- [ ] Offline edits and offline deletion are retained and synchronize correctly after reconnection.
-- [ ] Revision/generation conflicts are visible and recoverable, and a stale client cannot silently overwrite a new plan.
+- [x] Same-account phone and desktop data remain consistent, including deletion and recreation.
+- [x] Offline edits and offline deletion are retained and synchronize correctly after reconnection.
+- [x] Revision/generation conflicts are visible and recoverable, and a stale client cannot silently overwrite a new plan.
 - [x] Fifty goals remain clean and usable.
 - [x] Pinned, category, search, and tax-profile flows work end to end.
 - [x] Income results update from every relevant input.
 - [x] Seven themes preserve data and render their intended fonts.
-- [ ] Seven-theme offline readiness, failure retry, and version upgrades match the actual font cache.
-- [ ] The PWA installs and reopens offline.
+- [x] Seven-theme offline readiness, failure retry, and version upgrades match the actual font cache.
+- [x] The PWA installs and reopens offline.
 - [x] Firestore rules prevent cross-user access.
 - [x] Tax source years and limitations are visible.
 - [x] No paid service is required or enabled.
@@ -791,6 +861,22 @@ Exit criteria:
 11. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-02 — Phase 7.1 S8 authoritative cross-phase gate and final re-audit completed
+
+- Added the bilingual S1–S8-to-`npm run verify` coverage matrix and re-audited every Phase 1–7 exit criterion and release checklist item. No conflict requires an earlier-phase rollback or product/architecture scope change. Corrected early-phase drift in the root `README.md`, `scripts/README.md`, and `tests/README.md`.
+- Plan capacity now reserves the `Number.MAX_SAFE_INTEGER` revision width in its persistence envelope; an exact boundary remains saveable across 9→10 instead of passing Domain validation and failing only in the Repository. An old over-limit schema-v1 local record is neither overwritten nor deleted automatically and can be exported byte-for-byte before explicit cleanup; account preparation targets the affected account or anonymous record precisely and cannot erase the other valid cache.
+- Deeply corrupt cloud data also fails closed: the Firebase adapter preserves serializable source JSON for authenticated export, the client never automatically overwrites or deletes the Firestore record, and retry succeeds after repair. An authenticated account that is offline with no device cache is no longer misclassified as an empty cloud account.
+- Real-Chrome gates now cover old IndexedDB export/cleanup, export and repair of an over-limit cloud document injected by bypassing Rules, and a real IndexedDB account-cleanup failure with keyboard retry. This audit also fixed the account control's missing stable accessible name when its text is visually hidden at mobile width.
+- The final `npm run verify` passed: 120 unit/component/Repository tests across 19 files, eleven font families and 582 WOFF2 files, production build and budgets, two PWA offline reopens, seven-theme font/cache checks, 320–2000px extreme-content/WCAG/keyboard checks, eight Firebase Emulator tests, and independent desktop/phone synchronization.
+- Phase 7.1 is complete. Production Firebase was not connected, nothing was deployed or billed, and no GitHub Actions workflow was added. Physical iOS Safari/Android Chrome, production authorized domains, and final production acceptance remain Phase 8 work. This unit is not yet committed or pushed.
+
+### 2026-10-02 — Phase 7.1 S8 authoritative cross-phase gate and final re-audit started
+
+- S6–S7 were pushed to `origin/main` as commit `466fe80`. The complete pre-commit `npm run verify` gate passed, local and remote `main` SHAs match, and S8 starts from a clean working tree.
+- S8 first maps every S1–S7 acceptance scenario to the concrete steps run by `npm run verify`, then fills critical failure-injection gaps that currently exist only in unit fakes and not in real IndexedDB, Firebase Emulator, or Chrome paths. Existing PWA, seven-theme, eleven-font-family, and two-device coverage remains intact; the accepted UI and product scope do not change.
+- This unit must close two capacity risks retained by the S7 re-audit: provide a clear non-destructive recovery policy for pre-release over-limit schema-v1 local/cloud data, and ensure that an exact-capacity document cannot pass Domain editing only to fail at the Repository boundary when its revision gains a digit and leave unrecoverable UI state. It then re-reviews every Phase 1–7 exit criterion and the Phase 8 release checklist.
+- Automatic GitHub Actions remain disabled. Production Firebase will not be connected, and nothing will be deployed or billed. Phase 8 stays blocked until S8 completes, and this unit will not be committed or pushed without separate authorization.
 
 ### 2026-10-02 — Phase 7.1 S7 Firestore Rules and cloud-load error semantics repair completed
 

@@ -4,7 +4,7 @@ An installable, local-first planner that works backward from monthly life goals 
 
 ## Status
 
-The accepted visual demo and the legacy proof of concept are preserved under [`docs/reference`](docs/reference). Phase 1 has been re-verified, and the framework-independent Phase 2 plan domain, versioned tax rules, validation, migrations, selectors, and income solver are implemented. The production planner UI and Firebase synchronization are not implemented yet.
+The accepted visual demo and legacy proof of concept are preserved under [`docs/reference`](docs/reference). Phases 1–7 and the Phase 7.1 cross-phase stabilization are complete, including the responsive planner, versioned California tax engine, local-first IndexedDB persistence, installable PWA, seven themes and eleven self-hosted font families, Firebase Authentication/Firestore adapters, and the authoritative local quality gate. Production Firebase configuration and deployment have not started.
 
 Read [`AGENTS.md`](AGENTS.md) and the [`docs/project`](docs/project) control documents before making changes.
 
@@ -45,7 +45,7 @@ These commands are the authoritative quality gate. Automatic GitHub Actions work
 - Firebase Authentication and Firestore behind portable interfaces
 - Static hosting without automatic GitHub Actions
 
-Firebase is intentionally not connected during the foundation phase. No billing-enabled services, Cloud Functions, SMS authentication, or Firebase Storage are required by the MVP.
+Production Firebase is intentionally not configured in the repository. The authoritative local gate uses the Auth and Firestore emulators, and the app remains fully usable in anonymous local mode when Firebase is absent. No billing-enabled services, Cloud Functions, SMS authentication, or Firebase Storage are required by the MVP.
 
 ## Tax model
 

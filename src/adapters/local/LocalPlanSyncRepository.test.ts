@@ -2,7 +2,13 @@ import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 
 import { createSamplePlan } from "../../application/samplePlan";
-import type { LocalPlanSyncCommitKind, PlanSyncState } from "../../ports/LocalPlanSyncRepository";
+import { MAX_PLAN_UTF8_BYTES } from "../../domain/plan";
+import {
+  LocalPlanRecoveryError,
+  type LocalPlanSyncCommitKind,
+  type PlanSyncState,
+} from "../../ports/LocalPlanSyncRepository";
+import { createPlanWithSerializedBytes } from "../../test/planFixtures";
 import { LocalPlanRepository } from "./LocalPlanRepository";
 
 const ACCOUNT_ID = "account-one";
@@ -70,6 +76,40 @@ class InterruptibleLocalPlanRepository extends LocalPlanRepository {
 }
 
 describe("LocalPlanRepository atomic plan and sync persistence", () => {
+  it("preserves and exports a pre-limit schema-v1 record that no longer passes validation", async () => {
+    const factory = new IDBFactory();
+    const databaseName = `worthwhile-pre-limit-${crypto.randomUUID()}`;
+    const legacyPlan = createPlanWithSerializedBytes(DEVICE_ID, MAX_PLAN_UTF8_BYTES, 1);
+    await seedVersionOnePlan(factory, databaseName, legacyPlan);
+
+    const repository = new LocalPlanRepository(
+      factory,
+      databaseName,
+      `worthwhile-legacy-${crypto.randomUUID()}`,
+    );
+    let recoveryError: LocalPlanRecoveryError | null = null;
+    try {
+      await repository.loadPlanSync(ACCOUNT_ID);
+    } catch (error: unknown) {
+      if (error instanceof LocalPlanRecoveryError) recoveryError = error;
+      else throw error;
+    }
+
+    expect(recoveryError).not.toBeNull();
+    expect(JSON.parse(recoveryError!.recoveryJson)).toMatchObject({
+      schemaVersion: 1,
+      planId: legacyPlan.planId,
+      revision: 1,
+    });
+
+    const database = await requestResult(factory.open(databaseName));
+    const transaction = database.transaction("plans", "readonly");
+    const stored = await requestResult(transaction.objectStore("plans").get(ACCOUNT_ID));
+    await transactionComplete(transaction);
+    database.close();
+    expect(stored).toMatchObject({ accountId: ACCOUNT_ID, plan: { planId: legacyPlan.planId } });
+  });
+
   it("migrates the legacy sync database once without resurrecting cleared account data", async () => {
     const factory = new IDBFactory();
     const databaseName = `worthwhile-plan-v1-${crypto.randomUUID()}`;

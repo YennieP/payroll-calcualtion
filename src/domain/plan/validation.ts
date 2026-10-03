@@ -1,7 +1,7 @@
 import { isNonNegativeSafeInteger } from "../shared/money";
 import { DEFAULT_TAX_RULE_SET_ID } from "../tax/rules/us-ca-w2-2026";
 import {
-  getSerializedPlanByteLength,
+  getPlanPersistenceByteLength,
   MAX_GOALS_PER_CATEGORY,
   MAX_MONTHLY_GOAL_AMOUNT_CENTS,
   MAX_MONTHLY_GOAL_TOTAL_CENTS,
@@ -199,7 +199,7 @@ export function validatePlanDocument(value: unknown): PlanValidationResult {
     issues,
   );
 
-  const serializedBytes = getSerializedPlanByteLength(value);
+  const serializedBytes = getPlanPersistenceByteLength(value);
   if (serializedBytes > MAX_PLAN_UTF8_BYTES) {
     addIssue(
       issues,

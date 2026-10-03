@@ -14,4 +14,6 @@ Before a milestone handoff, commit, or deployment, run:
 npm run verify
 ```
 
-The full command runs type checking, linting, formatting, unit tests, a production build, architecture-boundary checks, PWA artifact checks, a real-Chrome offline reopen/edit check, the seven-theme browser font audit, and project-document checks. Later phases will extend the same entry point with Firebase Emulator, cross-device synchronization, and broader visual-regression checks.
+The full command runs type checking, linting, formatting, unit/component/Repository tests, font-asset checks, a production build, fail-closed performance and privacy budgets, architecture and PWA artifact checks, real-Chrome offline reopen/edit checks, seven-theme font/cache audits, 320–2000px extreme-content/accessibility checks, Firebase Auth/Firestore Emulator tests, independent desktop/phone synchronization, corrupt-cloud recovery, and project-document checks.
+
+The Firebase step uses only the local `demo-worthwhile-local` emulator project. It does not connect to production, deploy rules, enable billing, or consume GitHub Actions quota.

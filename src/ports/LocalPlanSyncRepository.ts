@@ -1,6 +1,16 @@
 import type { PlanDocument } from "../domain/plan/types";
 import type { PlanRepository, SaveResult } from "./PlanRepository";
 
+export class LocalPlanRecoveryError extends Error {
+  constructor(
+    readonly recoveryJson: string,
+    options?: { cause?: unknown },
+  ) {
+    super("本机保存的是旧版或不兼容计划。请先导出原始 JSON，再清理此设备副本。", options);
+    this.name = "LocalPlanRecoveryError";
+  }
+}
+
 export interface PlanSyncState {
   accountId: string;
   remoteRevision: number;

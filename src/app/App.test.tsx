@@ -10,6 +10,10 @@ import type { PlanDocument } from "../domain/plan";
 import { updateGoal } from "../domain/plan";
 import type { Account, AuthProvider } from "../ports/AuthProvider";
 import type { CloudRuntime } from "../ports/CloudRuntime";
+import {
+  LocalPlanRecoveryError,
+  type LocalPlanSyncSnapshot,
+} from "../ports/LocalPlanSyncRepository";
 import type {
   RemotePlanRepository,
   RemotePlanSnapshot,
@@ -216,6 +220,40 @@ class FailOnceDeleteRepository extends MemoryPlanRepository {
   }
 }
 
+class RecoverableLegacyRepository extends MemoryPlanRepository {
+  private recoveryPending = true;
+  readonly recoveryJson = JSON.stringify({
+    schemaVersion: 1,
+    planId: "10000000-0000-4000-8000-000000000001",
+    legacyPadding: "preserved-before-clear",
+  });
+
+  constructor(private readonly recoveryAccountId = "anonymous-local") {
+    super();
+  }
+
+  private recoverOrContinue(accountId: string) {
+    if (this.recoveryPending && accountId === this.recoveryAccountId) {
+      throw new LocalPlanRecoveryError(this.recoveryJson);
+    }
+  }
+
+  override async load(accountId: string): Promise<PlanDocument | null> {
+    this.recoverOrContinue(accountId);
+    return super.load(accountId);
+  }
+
+  override async loadPlanSync(accountId: string): Promise<LocalPlanSyncSnapshot> {
+    this.recoverOrContinue(accountId);
+    return super.loadPlanSync(accountId);
+  }
+
+  override async delete(accountId: string): Promise<void> {
+    if (accountId === this.recoveryAccountId) this.recoveryPending = false;
+    await super.delete(accountId);
+  }
+}
+
 function createCloudRuntime(account: Account | null = ACCOUNT, emitInitialState = true) {
   const auth = new FakeAuthProvider(account, emitInitialState);
   const plans = new FakeRemotePlanRepository();
@@ -231,6 +269,68 @@ async function renderPlanner() {
 }
 
 describe("local-first planner", () => {
+  it("offers a non-destructive export before clearing an incompatible local plan", async () => {
+    const repository = new RecoverableLegacyRepository();
+    const user = userEvent.setup();
+    const createObjectUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:worthwhile-recovery");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    render(<App repository={repository} deviceId={DEVICE_ID} />);
+
+    expect(await screen.findByRole("heading", { name: "本机计划需要恢复" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "已置顶" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导出原始计划 JSON" }));
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:worthwhile-recovery");
+
+    await user.click(screen.getByRole("button", { name: "清除此设备副本并继续" }));
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+    await expect(repository.load("anonymous-local")).resolves.toMatchObject({ revision: 0 });
+  });
+
+  it("does not treat an offline account without a cache as an empty cloud plan", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+    const repository = new MemoryPlanRepository();
+    const { runtime } = createCloudRuntime();
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+
+    expect(await screen.findByRole("heading", { name: "云端暂时无法读取" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "已置顶" })).not.toBeInTheDocument();
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+    await user.click(screen.getByRole("button", { name: "重新读取云端计划" }));
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+  });
+
+  it("clears the incompatible anonymous record without deleting a valid signed-in cache", async () => {
+    const repository = new RecoverableLegacyRepository("anonymous-local");
+    const accountPlan = { ...createSamplePlan(OTHER_DEVICE_ID), revision: 2 };
+    await repository.replacePlanAndSyncState(ACCOUNT.id, accountPlan, {
+      accountId: ACCOUNT.id,
+      remoteRevision: 2,
+      pendingRevision: null,
+      pendingDelete: false,
+    });
+    const { runtime, plans } = createCloudRuntime();
+    plans.seed(ACCOUNT.id, accountPlan);
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+
+    expect(await screen.findByRole("heading", { name: "本机计划需要恢复" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "清除此设备副本并重新读取" }));
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+    await expect(repository.load(ACCOUNT.id)).resolves.toEqual(accountPlan);
+    await expect(repository.load("anonymous-local")).resolves.toBeNull();
+  });
+
   it("finishes its immediate local save when development StrictMode replays effects", async () => {
     const repository = new MemoryPlanRepository();
 
@@ -425,6 +525,36 @@ describe("local-first planner", () => {
     expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
   });
 
+  it("exports an incompatible cloud plan without deleting it before retry", async () => {
+    const repository = new MemoryPlanRepository();
+    const { runtime, plans } = createCloudRuntime();
+    const recoveryJson = JSON.stringify({ schemaVersion: 1, legacyPadding: "cloud-preserved" });
+    plans.failNextLoad(
+      ACCOUNT.id,
+      new RemotePlanReadError("corrupt", "云端计划的数据结构不兼容或已损坏。", {
+        recoveryJson,
+      }),
+    );
+    const createObjectUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:worthwhile-cloud-recovery");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const user = userEvent.setup();
+
+    render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
+
+    expect(await screen.findByRole("heading", { name: "云端计划需要处理" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "导出云端原始计划 JSON" }));
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:worthwhile-cloud-recovery");
+    await user.click(screen.getByRole("button", { name: "重新读取云端计划" }));
+    expect(await screen.findByRole("heading", { name: "已置顶" })).toBeVisible();
+  });
+
   it("keeps a valid account cache usable while reporting corrupt cloud data", async () => {
     const repository = new MemoryPlanRepository();
     const localPlan = { ...createSamplePlan(DEVICE_ID), revision: 2 };
@@ -507,8 +637,16 @@ describe("local-first planner", () => {
 
     render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);
     const amount = await screen.findByRole("spinbutton", { name: "房租每月金额" });
+    await waitFor(() => expect(screen.getByText("已保存到本机")).toBeVisible());
+    await waitFor(() =>
+      expect(repository.load(ACCOUNT.id)).resolves.toMatchObject({ revision: 1 }),
+    );
     fireEvent.change(amount, { target: { value: "4321" } });
     fireEvent.blur(amount);
+    await waitFor(async () => {
+      const snapshot = await repository.loadPlanSync(ACCOUNT.id);
+      expect(snapshot.syncState?.pendingRevision).not.toBeNull();
+    });
 
     await user.click(screen.getByRole("button", { name: /planner@example.com/ }));
     await user.click(screen.getByRole("button", { name: "退出并清除此设备缓存" }));
@@ -582,6 +720,12 @@ describe("local-first planner", () => {
     const { runtime, auth, plans } = createCloudRuntime();
     const remotePlan = { ...createSamplePlan(OTHER_DEVICE_ID), revision: 1 };
     plans.seed(ACCOUNT.id, remotePlan);
+    await repository.replacePlanAndSyncState(ACCOUNT.id, remotePlan, {
+      accountId: ACCOUNT.id,
+      remoteRevision: 1,
+      pendingRevision: null,
+      pendingDelete: false,
+    });
     const user = userEvent.setup();
 
     render(<App repository={repository} deviceId={DEVICE_ID} cloudRuntime={runtime} />);

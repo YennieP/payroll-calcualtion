@@ -36,10 +36,19 @@ function readRemoteSnapshot(value: unknown): RemotePlanSnapshot {
   return { kind: "plan", plan: migratePlanDocument(value) };
 }
 
-function corruptRemoteData(error: unknown): RemotePlanReadError {
+function recoveryJson(value: unknown): string | null {
+  try {
+    return JSON.stringify(value) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function corruptRemoteData(error: unknown, value?: unknown): RemotePlanReadError {
   if (error instanceof RemotePlanReadError) return error;
   return new RemotePlanReadError("corrupt", "云端计划的数据结构不兼容或已损坏，已停止自动载入。", {
     cause: error,
+    recoveryJson: recoveryJson(value),
   });
 }
 
@@ -54,7 +63,7 @@ function parseRemoteSnapshot(value: unknown): RemotePlanSnapshot {
   try {
     return readRemoteSnapshot(value);
   } catch (error: unknown) {
-    throw corruptRemoteData(error);
+    throw corruptRemoteData(error, value);
   }
 }
 

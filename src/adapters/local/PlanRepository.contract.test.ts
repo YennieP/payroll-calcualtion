@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import { createSamplePlan } from "../../application/samplePlan";
 import { createPlanWithSerializedBytes } from "../../test/planFixtures";
 import {
-  getSerializedPlanByteLength,
   MAX_MONTHLY_GOAL_AMOUNT_CENTS,
   MAX_PLAN_UTF8_BYTES,
+  MAX_PLAN_REVISION,
   PlanConstraintError,
 } from "../../domain/plan";
 import type { PlanRepository } from "../../ports/PlanRepository";
@@ -81,16 +81,21 @@ function repositoryContract(name: string, createRepository: () => PlanRepository
       );
     });
 
-    it("validates the final document after a revision gains another digit", async () => {
+    it("keeps the Domain-approved capacity boundary editable across a revision digit", async () => {
       const repository = createRepository();
-      const plan = createPlanWithSerializedBytes(DEVICE_ID, MAX_PLAN_UTF8_BYTES, 9);
-      expect(getSerializedPlanByteLength(plan)).toBe(MAX_PLAN_UTF8_BYTES);
+      const revisionGrowth = String(MAX_PLAN_REVISION).length - String(9).length;
+      const plan = createPlanWithSerializedBytes(
+        DEVICE_ID,
+        MAX_PLAN_UTF8_BYTES - revisionGrowth,
+        9,
+      );
       await repository.replace(ACCOUNT_ID, plan);
 
-      await expect(repository.save(ACCOUNT_ID, plan, 9)).rejects.toBeInstanceOf(
-        PlanConstraintError,
-      );
-      await expect(repository.load(ACCOUNT_ID)).resolves.toMatchObject({ revision: 9 });
+      await expect(repository.save(ACCOUNT_ID, plan, 9)).resolves.toEqual({
+        status: "saved",
+        revision: 10,
+      });
+      await expect(repository.load(ACCOUNT_ID)).resolves.toMatchObject({ revision: 10 });
     });
   });
 }

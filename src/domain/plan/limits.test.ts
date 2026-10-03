@@ -12,6 +12,7 @@ import {
   MAX_MONTHLY_PRETAX_DEDUCTION_CENTS,
   MAX_PLAN_CATEGORIES,
   MAX_PLAN_GOALS,
+  MAX_PLAN_REVISION,
   MAX_PLAN_UTF8_BYTES,
   utf8ByteLength,
 } from "./limits";
@@ -51,13 +52,26 @@ describe("plan capacity and money contract", () => {
   });
 
   it("accepts the exact serialized-size boundary and rejects one byte more", () => {
-    const exact = createPlanWithSerializedBytes(DEVICE_ID, MAX_PLAN_UTF8_BYTES);
+    const exact = createPlanWithSerializedBytes(DEVICE_ID, MAX_PLAN_UTF8_BYTES, MAX_PLAN_REVISION);
     const over = growPlanByOneByte(exact);
 
     expect(getSerializedPlanByteLength(exact)).toBe(MAX_PLAN_UTF8_BYTES);
     expect(validatePlanDocument(exact).ok).toBe(true);
     expect(issueCodes(over)).toContain("plan_too_large");
     expect(() => parsePlanDocument(over)).toThrow(PlanConstraintError);
+  });
+
+  it("reserves enough bytes for a revision to grow without a later Repository-only failure", () => {
+    const revisionGrowth = String(MAX_PLAN_REVISION).length - String(9).length;
+    const sustainable = createPlanWithSerializedBytes(
+      DEVICE_ID,
+      MAX_PLAN_UTF8_BYTES - revisionGrowth,
+      9,
+    );
+    const rawBoundary = createPlanWithSerializedBytes(DEVICE_ID, MAX_PLAN_UTF8_BYTES, 9);
+
+    expect(validatePlanDocument(sustainable).ok).toBe(true);
+    expect(issueCodes(rawBoundary)).toContain("plan_too_large");
   });
 
   it("accepts exact money limits and keeps the tax solver inside its supported range", () => {

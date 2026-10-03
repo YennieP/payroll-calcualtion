@@ -69,6 +69,7 @@ describe("Firebase adapters across independent contexts", () => {
     await expect(context.plans.load(account.id)).rejects.toMatchObject({
       name: "RemotePlanReadError",
       kind: "corrupt",
+      recoveryJson: JSON.stringify(invalid),
     });
   });
 
@@ -104,6 +105,7 @@ describe("Firebase adapters across independent contexts", () => {
     await expect(receivedError).resolves.toMatchObject({
       name: "RemotePlanReadError",
       kind: "corrupt",
+      recoveryJson: JSON.stringify(invalid),
     });
   });
 

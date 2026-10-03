@@ -106,6 +106,19 @@ class MemoryRemotePlanRepository implements RemotePlanRepository {
 }
 
 describe("SyncedPlanRepository", () => {
+  it("blocks cloud-empty setup while offline when the device has no local account cache", async () => {
+    const repository = new SyncedPlanRepository(
+      new MemoryPlanRepository(),
+      new MemoryRemotePlanRepository(),
+      () => false,
+    );
+
+    await expect(repository.load(ACCOUNT_ID)).rejects.toMatchObject({
+      name: "RemotePlanReadError",
+      kind: "unavailable",
+    });
+  });
+
   it("does not turn an unavailable cloud document into a missing plan without local data", async () => {
     const remote = new MemoryRemotePlanRepository();
     remote.loadError = new RemotePlanReadError("unavailable", "Cloud temporarily unavailable.");

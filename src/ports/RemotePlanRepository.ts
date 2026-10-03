@@ -3,13 +3,16 @@ import type { PlanDocument } from "../domain/plan/types";
 export type RemotePlanReadErrorKind = "unavailable" | "corrupt";
 
 export class RemotePlanReadError extends Error {
+  readonly recoveryJson: string | null;
+
   constructor(
     readonly kind: RemotePlanReadErrorKind,
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; recoveryJson?: string | null },
   ) {
     super(message, options);
     this.name = "RemotePlanReadError";
+    this.recoveryJson = options?.recoveryJson ?? null;
   }
 }
 
