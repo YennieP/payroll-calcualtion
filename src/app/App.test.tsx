@@ -439,6 +439,10 @@ describe("local-first planner", () => {
     const themeDialog = screen.getByRole("dialog", { name: "选择主题" });
     await user.click(within(themeDialog).getByRole("button", { name: /蓝午夜/ }));
     expect(document.querySelector(".planner-app")).toHaveAttribute("data-theme", "midnight");
+    expect(document.querySelector(".logo-mark")).toHaveAttribute(
+      "src",
+      expect.stringContaining("icons/app-icon.svg#midnight"),
+    );
 
     await user.click(screen.getByRole("button", { name: "查看完整税费 →" }));
     expect(screen.getByRole("dialog", { name: "完整税费明细" })).toBeVisible();

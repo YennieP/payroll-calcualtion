@@ -1,6 +1,6 @@
 # MVP 实施计划
 
-更新日期：2026-10-02
+更新日期：2026-10-06
 
 > 本文件先提供中文版，后附英文版。两种语言表达同一份计划；以后更新阶段状态、验收条件或范围时，必须同步更新两部分。若出现歧义，以中文版确认产品意图，以英文版辅助 Agent 和代码协作。
 
@@ -12,7 +12,7 @@
 | 视觉方向     | 已完成           | 三栏 Demo、置顶主页、分类页、收入栏和 7 套主题已通过人工验收。                              |
 | 技术架构     | 已完成           | 已确定 React + TypeScript + Vite PWA、Firebase Auth/Firestore、本地优先存储和可替换适配层。 |
 | 仓库治理     | 已完成           | 开发约束、Agent 约束、验收 Demo 和旧版概念验证快照均已进入仓库。                            |
-| 产品实现     | Phase 7.1 已完成 | S1–S8 已完成并通过权威本地门禁；下一项是在用户授权后进入 Phase 8 发布。                     |
+| 产品实现     | Phase 7.2 待实现 | S1–S8 已完成；先收口新建确认、罗马序号和分类卡片拖拽并完成人工验收，再进入 Phase 8。        |
 | 部署         | 未开始           | 不使用自动 GitHub Actions；GitHub Pages 非 Actions 发布方式和 Firebase 配置尚未进行。       |
 
 ## 架构基线
@@ -252,7 +252,52 @@ React PWA
 - 计划大小和金额输入在进入 Firestore 或税务求解器前被受控处理。
 - 更新后的完整 `npm run verify` 通过，随后才能申请进入 Phase 8。
 
+## Phase 7.2 — 条目创建与分类导航交互收口
+
+状态：已于 2026-10-05 完成规划，尚未开始实现。Phase 8 在本阶段通过完整门禁和人工验收前保持阻断。
+
+问题定义：
+
+- 当前“添加项目”会立即在分类末尾写入名为“新目标”、金额 `$500/月` 的占位目标；用户尚未表达完整意图，计划 revision、IndexedDB 和收入结果就已经变化，长列表中还可能看不到新项目。
+- 当前“添加分类”同样会立即写入“新分类”。取消或误触没有无副作用的退出路径，连续点击还可能留下多个占位条目。
+- 当前分类图标是持久化的自由文本并允许用户修改，与分类位置没有稳定关系；分类排序只能进入设置后逐级上移/下移，缺少用户预期的卡片式直接操纵。
+
+交付物：
+
+- “添加项目”先打开跟随当前主题的确认弹窗；至少包含必填目标名称、初始留空的每月金额、预算方式和可选置顶状态。金额必须通过现有 Domain 上限校验，不能预填会影响收入的 `$500`。
+- “添加分类”使用同一交互原则，先在弹窗中收集名称再创建分类；不再直接插入“新分类”，也不再提供图标输入。
+- 弹窗中的输入只属于临时 UI 草稿。打开、关闭、点击遮罩、按 `Esc`、校验失败或取消均不得 dispatch 创建命令、推进 revision、写入 IndexedDB、排队云端同步或改变收入结果。
+- 只有一次有效提交才通过现有 Domain/action 路径创建一个稳定 ID 的条目；提交后定位到新分类或新目标，并防止双击重复创建。
+- 分类标识统一由当前数组/`order` 的一基位置派生为标准大写罗马数字 `I`–`L`，覆盖最多 50 个分类；左侧列表与分类详情中的标识保持一致。分类 B 拖到第一位后立即显示 `I`，原第一位分类变为 `II`，但二者稳定 ID、目标和数据归属不变。
+- `icon` 暂时作为 schema v1 兼容字段继续接受、导入和导出，避免无必要的数据迁移；UI 不再编辑或使用它作为显示来源，新建与重排也不依赖其值。后续 schema 版本如删除该字段必须另立迁移计划。
+- 左侧分类改为可排序卡片：独立拖拽手柄避免与点击进入分类冲突，拖动时提供抬起层级、占位空隙、目标位置提示和列表边缘自动滚动，并在七主题下保持可辨识状态。
+- 桌面鼠标、触控/触笔和移动端触摸均可拖拽；同时保留等价的键盘排序路径和现有上移/下移后备入口。屏幕阅读器获得拿起、目标位置、放下和取消的状态提示。
+- 拖拽过程中只维护临时视觉顺序。取消、`Esc`、回到原位或未跨越位置不得 dispatch、推进 revision 或持久化；只有落到不同位置才以一次“分类移至目标索引”领域动作提交一次排序和一次本机 revision，随后沿用现有云端 debounce。
+- 桌面端使用居中主题化弹窗，移动端适配窄屏和安全区；保持现有三栏/堆叠骨架、七主题、11 个字体家族和字体映射不变。
+- 补齐初始焦点、焦点约束、`Esc` 取消、提交后/取消后焦点返回、可访问名称和错误关联；键盘可以完成整个创建流程。
+- 目标/分类数量上限仍在打开入口和提交时双重校验。并发或提交前计划变化不能绕过 S6 的数量、金额与 256 KiB 契约。
+
+测试与人工验收：
+
+- Reducer/组件回归覆盖打开与取消零副作用、空名称、空/非法/超限金额、有效提交只创建一次、重复点击、50/500 数量边界，以及创建后收入只更新一次。
+- Domain/组件测试覆盖罗马数字关键边界 `I/IV/IX/XL/L`，以及任意分类移动到第一、中间、最后位置后编号连续、稳定 ID/目标归属不变。
+- 拖拽回归覆盖鼠标、触摸和键盘排序、点击卡片仍可导航、长按/小幅移动不误触、取消与原位放下零副作用、跨多位置只生成一次领域动作和一次 revision。
+- Repository/同步回归证明取消不会产生本机记录或 pending revision，有效提交仍保持即时本地保存和云端 debounce 语义。
+- 真实 Chrome 覆盖七主题、鼠标/触摸/键盘、320/390/900/1440/2000px、50 分类滚动与自动滚动、长分类末尾定位和无横向越界；不得削弱既有 50 项目标、字体、PWA、Firebase Emulator 与双设备门禁。
+- 人工验收同时检查目标/分类弹窗，以及分类卡片的罗马序号、拖动层级、放置反馈、移动端触控、取消语义和提交后的定位反馈。
+
+退出条件：
+
+- 新建分类和目标都必须先填写并确认；任何取消路径都对计划数据、revision、持久化和收入结果零副作用。
+- 不再自动创建“新目标 + `$500`”或“新分类”占位数据；一次有效提交只创建一个条目。
+- 分类标识始终按当前位置显示连续的 `I`–`L`，不可编辑；拖拽、键盘或后备按钮重排后稳定 ID、目标归属和当前选择保持正确。
+- 取消/原位拖放零副作用，跨位置拖放只生成一次排序提交；50 分类下仍可滚动、定位且不与点击导航冲突。
+- 七主题、桌面与移动布局、键盘/读屏路径、长列表定位和全部既有跨阶段回归通过。
+- `npm run verify` 全绿，并由用户完成人工验收；之后才能请求进入 Phase 8。
+
 ## Phase 8 — 发布 MVP
+
+状态：被 Phase 7.2 阻断，尚未开始。
 
 交付物：
 
@@ -285,6 +330,8 @@ React PWA
 - [x] 税务数据年份和限制清晰可见。
 - [x] 不需要或启用任何付费服务。
 - [x] 计划容量和金额边界在 Firestore/税务引擎失败前得到受控处理。
+- [ ] 新建分类和目标在确认前不会创建占位数据、保存 revision 或改变收入结果。
+- [ ] 分类按当前位置显示不可编辑的罗马数字，并可通过鼠标、触摸和键盘拖拽式重排而不改变稳定身份。
 - [ ] 测试、构建和人工视觉验收全部通过。
 
 ## 计划提交顺序
@@ -299,9 +346,154 @@ React PWA
 8. `feat: add Firestore cross-device sync`
 9. `test: add security sync and visual coverage`
 10. `fix: close cross-phase data and offline lifecycle gaps`
-11. `docs: document deployment privacy and tax assumptions`
+11. `fix: polish creation and category navigation interactions`
+12. `docs: document deployment privacy and tax assumptions`
 
 ## 更新日志
+
+### 2026-10-06 — 将固定安装图标切换为“酒红古金”
+
+- 操作系统安装图标无法跟随应用内主题即时换色，因此用户从跨主题静态配色候选中确认第 2 款“酒红古金”作为统一品牌图标。网页顶栏继续通过 `app-icon.svg#theme` 使用七套动态配色；本次只更新无 fragment SVG 与 manifest PNG 使用的默认色，不改变 Logo 几何、主题数据或交互。
+- 固定配色锁定为酒红黑背景 `#3A151D/#17070B/#050102`、酒红星盘 `#55242E/#341019`、古金金属与轨道 `#CCA34F/#D8B76D`、暖象牙字面 `#FFF5DE`、陶土阴影 `#A85F38`、深酒红厚度 `#270B0F` 和鎏金描边 `#E1BB63`。192px 与 512px PNG 已由同一 SVG 重新生成。
+- 真实 Chrome 门禁新增无主题静态配色断言，同时保留七主题像素差异、34px 顶栏 Logo、字体与规划数据稳定检查。`npm run verify:quick` 所覆盖的静态检查以及完整 `npm run verify` 均通过，包含 120 项单元测试、七主题、PWA 离线、320–2000px、Firebase Emulator 和双浏览器同步。本次未部署、commit 或 push，Phase 7.2 状态不变。
+
+### 2026-10-06 — 移除拱门与星石并强化聚光中央徽记
+
+- 人工验收发现上一版在网页顶栏实际 `34×34px` 尺寸下，拱门与顶部棱形占用了过多视觉面积，导致星盘和 `W` 不够醒目。正式 Logo 因此删除外拱、已移除的内拱和顶部星石，不再用建筑轮廓包围字标；七主题换色、圆角背景、安全边框、顶栏占位和完整徽记外层 `1.24×` 变换保持不变。
+- 聚光扩展为 `M170 0h172l91 438H79z`；天体轨道星盘与三层 `W` 的共享组合改为 `translate(256 228) scale(1.36) translate(-256 -246)`，使星盘在 512px 成品内约宽 `401px`。底座保持水平居中并扩大为 `(cx=256, cy=404.9, rx=140, ry=16)`，与星盘保留约 `0.94` 个局部单位的轻微重叠以消除接缝。正式 Cinzel Decorative Bold 路径、三层相对关系及中央上尖角的 `translate(12.7921909 0)` 光学校正均未改变。
+- 真实 Chrome 几何门禁已改为明确要求外拱、内拱和星石不存在，并锁定放大后的聚光、星盘直径、底座、中央尖角中线、安全边界、七主题换色与 `34×34px` 顶栏占位。192px 与 512px PWA 图标已从同一 SVG 重新生成；桌面页面和 512px 成品均已视觉复核，`npm run verify:quick` 与完整 `npm run verify` 均通过，覆盖 120 项单元测试、七主题、PWA 离线、320–2000px、Firebase Emulator 与双浏览器同步。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-06 — 采用“天体轨道”星盘并按中央尖角视觉居中
+
+- 用户从九款星盘候选中确认第 3 款“天体轨道”。正式 Logo 保留半径 `119` 的外环、单拱、星石、聚光、对称底座、完整徽记变换和七主题配色，只将旧的十二根放射线替换为半径 `99` 的引导环、三条 `rx=91/ry=38` 且旋转 `0°/+60°/-60°` 的椭圆轨道、三个星点、半径 `43` 的中心盘与半径 `29` 的内环。
+- 复核确认旧门禁虽然让 `W` 的整体包围盒数学居中，但人眼最容易捕捉的主字面中央上尖角位于星盘中线左侧 `12.7921909` 个局部单位。字面、描边和暗面厚度现作为一个整体使用 `translate(12.7921909 0)` 光学校正，使主字面源点 `(529,-716)` 精确落在 `x=256`；三层原始矩阵、深度层相对 `(+8,+10)` 偏移、共享星盘组合变换和垂直中心均未改变。包围盒不再被错误地当作视觉中心，完整字形仍留在外拱内并保留至少 30 个局部单位安全距离。
+- 真实 Chrome 门禁新增天体轨道几何、旧放射线必须缺席、中央尖角中线、三层字形矩阵和整体光学校正断言，同时继续检查 1.5 倍拱门间距、七主题换色、34×34px 顶栏占位、字体与规划数据稳定性。192px 与 512px PWA 图标已从同一 SVG 重新生成；`npm run verify:quick` 和完整 `npm run verify` 均全绿，覆盖 19 个测试文件共 120 项测试、11 个字体家族/582 个 WOFF2、生产构建、七主题真实 Chrome、PWA 离线、320–2000px、Firebase Emulator 与双浏览器同步。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-06 — 将单拱间距比提高至 1.5
+
+- 人工验收认为 `1.2×` 顶部/左侧间距方案视觉偏矮，因此保持左右立柱中心线 `x=91/421`、立柱顶端 `y=209` 及其他徽记组件不动，将对称拱顶中心线从 `y=90.05` 提高至 `y=82.625`；两侧贝塞尔控制点按新拱高等比例重算，继续保持严格镜像和顺滑连接。
+- 按实际可见描边边缘复核，星盘左侧间距仍为 `24.75` 个本地单位，顶部间距变为 `37.125`，比例精确为 `1.5×`。顶部星石与拱顶保留 `0.325` 个本地单位的几何分隔；512px、192px 和顶栏实际 34px 缩略图均已检查，没有裁切、偏移或边界越界。
+- 192px 与 512px PWA 图标已从同一 SVG 重新生成；生产构建、七主题真实 Chrome 几何/配色、离线字体和数据稳定门禁通过。`npm run verify:quick` 与完整 `npm run verify` 均通过；本次不改变星盘、W、底座、业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-06 — 按 1.2 间距比降低单拱高度
+
+- 保持左右立柱中心线 `x=91/421`、立柱顶端 `y=209` 和完整徽记外层变换不变，将对称拱顶中心线从 `y=66` 降至 `y=90.05`；两侧贝塞尔控制点按新拱高等比例重算，避免只压低顶部造成曲线折点或左右不一致。
+- 间距使用实际可见描边边缘而不是路径中心线计算：星盘最左端到左侧拱门内缘为 `24.75` 个本地单位，星盘顶部到拱顶下缘为 `29.70`，实测比例 `1.1999992`，门禁允许误差不超过 `0.001`。顶部星石保持原位并与降低后的拱顶分离，可见描边间距为 `7.75`。
+- 星盘、W、对称底座及底部位置均不移动；真实路径复核中星盘中心线距外拱至少约 `34.1`，W 距弧形拱线至少约 `43.49`，仍完整位于拱门内。192px、512px 与 34px 图标已重新生成并视觉检查，针对性生产构建与七主题真实 Chrome 几何/字体门禁通过；本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+- `npm run verify:quick` 与完整 `npm run verify` 均通过：19 个测试文件共 120 项测试、11 个字体家族共 582 个 WOFF2、生产构建、七主题几何、PWA 离线重开、320–2000px 极端内容、Firebase Emulator 和双浏览器同步保持全绿。
+
+### 2026-10-06 — 上移星盘字标并以固定底边延展底座
+
+- 将已经统一放大 `1.10×` 的玫窗星盘与王冠宣叙 `W` 作为同心组合向上移动 6 个本地 SVG 单位，共享中心由 `(256, 266)` 调整为 `(256, 260)`；二者的相对比例与几何中心不变，外拱、顶部星石、背景光束、安全边框和外层徽记变换均不移动。
+- 底座最低点严格保留在本地 `y=418.9`，横向半径继续为 `99`。为让最高点与上移后的星盘下缘 `y=390.9` 衔接，椭圆调整为中心 `(256, 404.9)`、垂直半径 `14`，上下各 14 单位，保持严格的上下对称；几何衔接误差限制在 `0.11` 单位内。
+- 真实路径复核显示星盘距外拱仍约 `34.1` 单位，W 的右上冠形距弧形拱顶最小约 `46.35` 单位，字母仍越出星盘但完整留在外拱内。192px、512px 与 34px 图标已重新生成并视觉检查，针对性生产构建及七主题真实 Chrome 几何/字体门禁通过；本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+- `npm run verify:quick` 与完整 `npm run verify` 均通过：19 个测试文件共 120 项测试、11 个字体家族共 582 个 WOFF2、生产构建、七主题几何、PWA 离线重开、320–2000px 极端内容、Firebase Emulator 和双浏览器同步保持全绿。
+
+### 2026-10-06 — 等比放大星盘、字标与舞台底座
+
+- 在已验收的单拱与上移星石构图上，将玫窗星盘、王冠宣叙 `W` 和舞台底座统一放大 `1.10×`；外拱、顶部星石、背景光束、安全边框、完整徽记的 `1.24×` 外层变换和顶栏 `34×34px` 占位均保持不变。
+- 星盘与 `W` 作为同一同心组合，以源中心 `(256, 246)` 映射到既有视觉中心 `(256, 266)` 后统一缩放；底座使用相同倍率并围绕固定中心 `(256, 409)` 缩放。因此字形联合包围盒与星盘中心误差低于 `0.001`，右上冠形与左下尾部仍越出星盘外圈，但真实字形路径距外拱至少约 `47.8` 本地单位。
+- 倍率探测比较了 `1.05×` 至 `1.22×`：最终 `1.10×` 让星盘直径从 238 增至 261.8，本体距外拱约 `34.1`，并与同倍率底座保留约 `2.2` 单位几何间距；`1.12×` 已开始发生星盘与底座几何重叠，因此未采用。192px、512px 与 34px 结果均已视觉检查，针对性生产构建和七主题真实浏览器字体/Logo 门禁通过；本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+- `npm run verify:quick` 与完整 `npm run verify` 均通过：19 个测试文件共 120 项测试、11 个字体家族共 582 个 WOFF2、生产构建、七主题几何、PWA 离线重开、320–2000px 极端内容、Firebase Emulator 和双浏览器同步保持全绿。
+
+### 2026-10-06 — 上移王冠星石并移除内拱
+
+- 在恢复后的 1.24 倍完整徽记基础上，按最新人工意见移除较细的内侧拱门；外侧主拱、玫窗、王冠宣叙 `W`、舞台、背景光束、安全边框、完整徽记变换和顶栏 `34×34px` 占位均保持不变。
+- 原星石若按内外拱顶的 44 单位距离直接等量上移，经过完整徽记的 1.24 倍变换会越出画布。为保留原来星石与内拱顶的精确穿插关系并避免裁切，星石等比缩为 `32.5×32.5` 本地单位并移至 `x=239.75..272.25`、`y=42.3..74.8`；外拱顶 `y=66` 仍在其高度的 `35/48` 处穿过，渲染后顶部保留约 12 单位安全距离。
+- 192px 与 512px 安装图标由同一 SVG 重新生成；浏览器门禁现在要求内拱不存在、星石保持既定穿插比例和顶部安全距离、玫窗与实际字形路径保持在外拱内，并继续检查 1.24 倍整体边界、上下留白、七主题换色及 `34×34px` 顶栏显示。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+- `npm run verify:quick` 与完整 `npm run verify` 均通过：19 个测试文件共 120 项测试、11 个字体家族共 582 个 WOFF2、生产构建、七主题真实浏览器几何与离线字体、320–2000px 极端内容、PWA 离线重开、Firebase Emulator 和双浏览器同步均保持全绿。
+
+### 2026-10-06 — 恢复 1.24 倍完整双拱徽记
+
+- 人工评审认为后续幕布与纯星盘方向过于单薄，因此明确恢复到 2026-10-05 已记录的“完整徽记 1.24×”版本：外拱、内拱、宝石、玫窗、王冠宣叙 `W` 与舞台全部回归，并保持彼此在该版本中的相对比例。
+- 撤销后续角幕试装和仅单拱阶段引入的玫窗/字标额外 `1.05×` 放大；完整徽记继续使用 `translate(0 18.4) translate(256 246) scale(1.24) translate(-256 -246)`，玫窗与字标组合只保留二十单位下移。顶部外拱可见留白约 `34.38`，底部舞台留白约 `34.32`，方形背景、中央光束、安全边框和顶栏 `34×34px` 占位保持不变。
+- 192px 与 512px 安装图标从恢复后的同一 SVG 重新生成；浏览器门禁恢复双拱存在性、内拱字形安全距离、1.24 倍整体边界、上下留白和七主题像素差异检查。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 试装双角剧院幕布构图
+
+- 按人工评审要求移除最后一层外拱，当前试装不再保留任何拱门线条；改为在画布左上、右上放置严格镜像的四分之一圆剧院幕布，以角部框景替代覆盖整幅画面的建筑拱门。
+- 幕布独立于中央徽记变换：布面使用当前主题的深色面板色与主强调色，褶皱混合第二强调色，内侧弧形滚边沿用主题金属高光，因此七主题各自换色且不会遮蔽中央玫窗。中央玫窗、王冠宣叙 `W`、宝石与舞台的位置和上一版比例保持不变。
+- 浏览器门禁改为要求内外拱均不存在，验证两块幕布的镜像尺寸、边距与主题像素差异，并继续限制中央组合、舞台、外框和 34px 顶栏缩略图的安全范围。本次为待人工验收的视觉试装，不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 简化为单拱门并放大中央徽记
+
+- 根据人工意见移除较细的内侧拱门，只保留外侧主拱作为唯一建筑轮廓，减少两条拱线与玫窗叠加造成的拥挤。外拱、宝石、舞台、背景光束、安全边框和整体上下居中位置不变。
+- 玫窗、放射线、内环与王冠宣叙 `W` 继续作为同心组合，并围绕共享中心等比放大 `1.05×`；字母不会脱离圆窗单独放大。放大后的完整圆窗与字面/厚度必须继续位于单一外拱内部，并保留可测量安全距离。
+- 浏览器门禁新增“内拱必须不存在”和圆窗/真实字形路径到外拱的联合安全距离检查，同时保留 1.24 倍完整徽记、上下留白、七主题配色及数据稳定断言。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 等比放大已平衡的银冠花庭徽记
+
+- 在上下边缘留白完成对齐后，按人工意见将外拱、内拱、宝石、玫窗、王冠宣叙字标与舞台组成的完整内部徽记从 `1.18×` 小幅等比放大到 `1.24×`；方形背景、顶部光束、安全边框和顶栏 34px 占位不变。
+- 为避免放大重新破坏垂直平衡，完整徽记的最终下移量由 18 精调为 18.4 个 SVG 单位。外拱描边上缘与舞台几何底边到画布边缘均约为 34 个单位，横向仍严格居中，内部玫窗与 `W` 的相对位置不变。
+- 192px 与 512px 安装图标从同一 SVG 重新生成；浏览器门禁同步锁定 1.24 倍比例、18.4 单位平移、上下可见留白、内拱安全距离和七主题数据稳定性。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 对齐银冠花庭整体徽记的上下边缘留白
+
+- 截图复核确认上一轮只下移玫窗与 `W`，没有改变决定整体上边界的外拱和决定下边界的舞台，因此实际可见留白仍约为顶部 27、底部 63 个 SVG 单位；既有门禁只检查不越界，没有检查上下光学平衡。
+- 保持背景、顶部光束、安全边框及徽记内部相对布局不变，将包含外拱、内拱、宝石、玫窗、王冠宣叙字标和舞台的整个 `logo-emblem` 再统一向下平移 18 个最终渲染单位。外拱亮边与画布顶部、舞台几何底边与画布底部现在均保留约 45 个单位。
+- 浏览器门禁改为直接测量外拱描边上缘和舞台底边的可见留白，要求二者差值不超过 0.2 个 SVG 单位，同时继续验证内部圆心、内拱安全距离、左右对称、七主题配色和 34px 顶栏占位。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 平衡银冠花庭顶部与底部视觉密度
+
+- 人工验收指出宝石、双拱顶、玫窗和放大字标在上半部形成的密度高于底部舞台区域。为保留字标相对圆形的居中关系，没有单独移动 `W`，而是将玫窗、放射线、内环和王冠宣叙字标作为同一组合向下平移 20 个本地 SVG 单位；第二轮人工意见将最初的 6 单位增加到 10 单位，第三轮再向下增加 10 单位。
+- 调整后玫窗与字标共享的本地视觉中心从 `(256, 246)` 移至 `(256, 266)`；经过外层 1.18 倍缩放后，渲染中心约为 `(256, 269.6)`。宝石、双拱、舞台基座、外框和顶栏 34px 占位不变，因此顶部呼吸进一步增加、底部圆窗与舞台联系收紧但仍保留间距。
+- 浏览器门禁新增组合变换和实际渲染中心断言，并继续用真实字形路径确认越出圆窗、内拱安全距离与七主题数据稳定性。192px、512px 图标已重新生成；本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 放大王冠宣叙字标并允许越出圆形玫窗
+
+- 根据人工验收意见，将中央 Cinzel Decorative Bold `W` 在内部徽记坐标系中再放大 20%，同时保持正面与右下厚度层的联合中心严格位于玫窗圆心 `(256, 246)`；拱门、玫窗、宝石和舞台的位置与上一版不变。
+- 放大后的右上冠形收笔和左下尾部会越过圆形玫窗轮廓，利用遮挡关系强化前景浮雕感，但完整字面和厚度路径仍被限制在内拱曲线内。自动浏览器门禁现在采样真实字形路径：既要求最大半径超过玫窗半径，也要求所有采样点与内拱保留至少 5 个本地 SVG 单位的安全距离。
+- 192px、512px 与 34px 图标已重新生成并检查；七主题颜色、顶栏外部尺寸、页面数据和布局不变。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 放大银冠花庭内部徽记并减少深色留白
+
+- 根据人工验收意见，保持图标画布、圆角背景、安全边框和顶栏 34×34px 外部占位不变，只将拱门、玫窗、“王冠宣叙”字标、宝石与舞台组成的内部徽记围绕玫窗中心 `(256, 246)` 等比放大至 1.18 倍。
+- 放大后内部徽记在 512 单位画布上保留约 61 单位的对称左右留白，顶部约 34 单位、底部约 63 单位；边框继续独立保留真实安全内距，因此减少黑色空场的同时不会碰撞圆角裁切区。字标相对玫窗的比例、立体方向和七主题配色保持不变。
+- 192px、512px PWA 图标已重新生成，34px 顶栏缩略图可辨识。真实 Chrome 门禁新增变换后徽记包围盒、左右对称留白和边框安全范围检查；本次不改变顶栏布局、业务数据、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 确认并应用“王冠宣叙”中央字标
+
+- 用户从三款立体和三款平面候选中确认候选 1“王冠宣叙”。正式 Logo 使用 Cinzel Decorative Bold 的真实 `W` 轮廓，不再沿用手工几何近似；轮廓已在 SIL OFL 1.1 条款下路径化嵌入 SVG，不增加运行时字体下载或应用字体家族数量。
+- 保留候选稿的右上扬冠形收笔、哑光象牙字面、细主题鎏金/银边及右下暗面厚度。正面与厚度围绕同一中心对称错开，联合包围盒继续对齐玫窗 `(256, 246)`，不改变拱门、玫窗、宝石、舞台基座和 34px 顶栏占位。
+- 已从同一 SVG 重新生成 192px 与 512px PWA 图标；34px 缩放可辨识，七主题像素签名、Logo DOM 几何与规划数据稳定性浏览器检查通过。本次不改变业务、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 银冠花庭中央字标升级为戏剧化立体衬线
+
+- 在不改变拱门、玫窗、宝石、舞台基座、34px 顶栏占位和七主题结构的前提下，将中央普通几何 `W` 重绘为路径化的高对比罗马衬线字标；字形不依赖系统字体，离线、跨设备和 PNG 导出结果保持一致。
+- 根据后续人工反馈，舍弃偏游戏徽章感的冷白镜面金属，字标进一步横向收窄为更接近歌剧海报的比例，并改用低反光主题珐琅正面、细鎏金/银边、右下深色厚度和克制的顶部刻线。正面与厚度仍分别向左上、右下等量错开，联合包围盒严格以玫窗 `(256, 246)` 为中心。
+- 真实 Chrome 检查曾发现旧路径下半部左右不对称及字面泛光造成的额外 2 单位视觉偏移；现已重绘中心骨架并移除该非对称泛光，保留更清晰的雕刻式立体边。192px、512px 与 34px 缩放均保持可辨识，七主题像素签名和 Logo DOM 几何门禁通过；本次不改变业务数据、同步、税务或 Phase 7.2 状态，未部署、commit 或 push。
+
+### 2026-10-05 — 修正银冠花庭内部中心与安全边界
+
+- 人工复核确认此前只检查了顶栏 34px 外部占位，没有检查 SVG 内部各层几何。原 `W` 包围盒中心为 `(287, 267)`，相对玫窗中心 `(256, 246)` 向右偏 31、向下偏 21 个 SVG 单位，右侧还越过玫窗 23 个单位；该问题来自源路径，不是浏览器缩放。
+- 将 `W` 等比缩小 10% 并重绘到 `(256, 246)` 中心，使其在玫窗内获得对称的约 19.1 单位水平间距和 45.2 单位垂直间距；玫窗渐变同步对齐到 `(256, 246)`，门楣、内拱与宝石高光改为垂直对称光轴，外框由贴边描边改为保留 4 个单位的真实安全边距。
+- 真实 Chrome 字体/主题门禁新增 SVG DOM 几何检查：外拱、内拱、玫窗、`W`、宝石、舞台和外框必须同轴，`W` 必须在玫窗内保持对称安全间距，各光轴必须位于 x=256；192px 与 512px PWA 图标已从同一 SVG 重新生成。本次不改变七主题配色、页面布局、业务数据或 Phase 7.2 状态，尚未部署、commit 或 push。
+
+### 2026-10-05 — 银冠花庭 Logo 跟随七主题换色
+
+- 根据用户验收意见，保留“银冠花庭”的拱门、玫窗、宝石、舞台基座、路径化 `W` 和 34px 顶栏占位，只让正式网页中的 Logo 配色随当前主题即时变化；切换主题仍不改变规划数据、导航或计算结果。
+- 顶栏复用一份外部 SVG 几何，通过 URL 片段选择其内部主题语义色，不复制七份路径资源，也不把整套路径塞入初始 JavaScript。绯红绒、蓝午夜、三个紫午夜、金歌剧和绯歌剧分别继承各自的深色背景、主强调色与第二强调色；自动浏览器门禁以像素摘要校验七套 Logo 配色均不重复且尺寸始终为 34×34px。
+- PWA 安装图标继续使用固定的银紫标准版，因为浏览器和操作系统不会随应用内主题动态替换已安装图标。本次只扩展已获批准 Logo 的主题行为，不改变信息架构或 Phase 7.2 状态；未部署、commit 或 push。
+
+### 2026-10-05 — 试装“银冠花庭”品牌图标
+
+- 根据用户的本机视觉验收请求，将 Logo 候选 4“银冠花庭”应用到正式顶栏和 PWA 安装资源；顶栏继续保持 34px 占位与既有导航语义，不改变三栏信息架构、主题数据或计算行为。
+- 正式 SVG 使用自包含的午夜蓝背景、双层银冠门楣、放射玫窗、紫色冠顶宝石、舞台基座和路径化 `W`；新增 `npm run icons:sync`，通过本机 Chrome 从同一 SVG 可重复生成 192px 与 512px PNG，避免三份图标手工漂移。
+- 本次属于待人工验收的品牌试装，不代表 Logo 已最终锁定，也不推进 Phase 7.2 的功能状态；未部署、commit 或 push。
+
+### 2026-10-05 — 扩充 Phase 7.2 分类序号与拖拽排序范围
+
+- 用户确认分类图标不再是可编辑内容：所有分类按当前一基序列位置显示标准大写罗马数字 `I`–`L`。编号是派生展示而非身份；分类移动后编号随位置变化，稳定 ID、目标归属和当前选中状态保持不变。
+- 左侧分类项升级为卡片式可排序列表，支持鼠标、触摸/触笔和键盘，并保留上移/下移后备入口。拖动过程使用临时视觉状态，取消或原位放下零副作用，只有跨位置放下才提交一次目标索引重排和一次 revision。
+- schema v1 的 `icon` 字段暂时保留用于旧 JSON 兼容，但退出编辑和展示路径；本轮不做 schema 迁移。测试与人工验收新增罗马数字边界、50 分类滚动、自动滚动、稳定 ID、点击/拖拽冲突、七主题拖动状态及移动端触控。
+- Phase 7.2 名称和提交计划同步扩展为“条目创建与分类导航交互收口”；Phase 8 继续阻断。本次仅更新计划与约束，未修改产品代码、未连接 Firebase、未部署、未 commit 或 push。
+
+### 2026-10-05 — 规划 Phase 7.2 新建条目确认交互收口
+
+- S8 已作为 commit `91ce59f` 推送到 `origin/main`，推送后完整 `npm run verify`、代码级复核和依赖审计均通过；工作树以干净状态进入本次计划调整。
+- 本机人工验收发现“添加项目”会立即写入“新目标 + `$500/月`”，“添加分类”会立即写入“新分类”。这会在用户确认前推进 revision、持久化占位数据并改变收入，且长列表末尾缺少明确反馈，因此 Phase 8 暂停，新增 Phase 7.2 先收口创建语义。
+- Phase 7.2 使用跟随七主题的分类/目标弹窗和临时 UI 草稿；取消与校验失败零副作用，只有一次有效提交进入现有 Domain/action、本地即时保存和云端 debounce 链路。范围不包含删除流程重设计、税务规则、同步协议、主题/字体或三栏信息架构变更。
+- 验证覆盖组件、Repository/同步和真实 Chrome 的七主题、键盘、320–2000px 与长列表定位；完整门禁及用户人工验收通过后才可进入 Phase 8。本次只更新计划与约束，未修改产品代码、未连接 Firebase、未部署、未 commit 或 push。
 
 ### 2026-10-02 — 完成 Phase 7.1 S8 权威跨阶段门禁与最终复核
 
@@ -561,18 +753,18 @@ React PWA
 
 # English version
 
-Last updated: 2026-10-02
+Last updated: 2026-10-06
 
 ## Current status
 
-| Area                   | Status             | Evidence or next action                                                                                        |
-| ---------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------- |
-| MVP product scope      | Complete           | California planning, 50-goal information architecture, and non-goals are agreed.                               |
-| Visual direction       | Complete           | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.        |
-| Architecture           | Complete           | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed. |
-| Repository governance  | Complete           | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.       |
-| Product implementation | Phase 7.1 complete | S1–S8 passed the authoritative local gate; Phase 8 release work may start after explicit user approval.        |
-| Deployment             | Not started        | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.        |
+| Area                   | Status            | Evidence or next action                                                                                          |
+| ---------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| MVP product scope      | Complete          | California planning, 50-goal information architecture, and non-goals are agreed.                                 |
+| Visual direction       | Complete          | Three-column demo, pinned home, category view, income panel, and seven themes passed manual acceptance.          |
+| Architecture           | Complete          | React + TypeScript + Vite PWA, Firebase Auth/Firestore, local-first storage, and portable adapters are agreed.   |
+| Repository governance  | Complete          | Control documents, accepted demo, and the legacy proof-of-concept snapshot are stored in the repository.         |
+| Product implementation | Phase 7.2 planned | S1–S8 passed; confirmed creation, Roman markers, sortable category cards, and manual acceptance precede Phase 8. |
+| Deployment             | Not started       | Automatic GitHub Actions are disabled; a non-Actions Pages path and Firebase configuration are pending.          |
 
 ## Architecture baseline
 
@@ -811,7 +1003,52 @@ Exit criteria:
 - Plan-size and money limits are handled before Firestore or the tax solver fails.
 - The updated complete `npm run verify` passes before requesting permission to enter Phase 8.
 
+## Phase 7.2 — Creation and category-navigation interaction polish
+
+Status: Planned on 2026-10-05 and not yet implemented. Phase 8 remains blocked until this phase passes the complete gate and manual acceptance.
+
+Problem statement:
+
+- “Add item” currently appends a placeholder named “New goal” with `$500/month` immediately. The plan revision, IndexedDB record, and income result change before the user has expressed a complete intent, and the new row can be invisible at the end of a long list.
+- “Add category” likewise writes “New category” immediately. Cancelled intent and accidental clicks have no zero-side-effect exit, and repeated clicks can leave multiple placeholders.
+- Category icons are currently persisted, user-editable free text with no stable relationship to sequence position, while reordering requires opening settings and moving one step at a time instead of directly manipulating cards.
+
+Deliverables:
+
+- “Add item” first opens a theme-aware confirmation dialog containing at least a required goal name, initially blank monthly amount, budget mode, and optional pinned state. The amount must use the existing Domain limits and must not default to a value such as `$500` that changes income.
+- “Add category” follows the same interaction rule, collecting a name in a dialog before creation instead of inserting “New category” directly; it no longer offers an icon input.
+- Dialog values remain temporary UI draft state. Opening, closing, clicking the backdrop, pressing `Escape`, validation failure, or cancellation must not dispatch a create command, advance revision, write IndexedDB, queue cloud synchronization, or change income.
+- Exactly one valid submission creates one stable-ID item through the existing Domain/action path, navigates or focuses the new category/goal, and prevents duplicate creation from repeated clicks.
+- Category markers derive from the current array/`order` one-based position using canonical uppercase Roman numerals `I`–`L` for at most 50 categories. The left list and category detail use the same marker. Moving category B to first position immediately makes it `I` and the former first category `II`, while stable IDs, goals, and ownership remain unchanged.
+- Keep `icon` as an accepted/imported/exported schema-v1 compatibility field to avoid an unnecessary data migration, but remove it from UI editing and display. New creation and reorder behavior cannot depend on its value; removing it later requires a separately planned schema migration.
+- The left list becomes sortable cards with a dedicated drag handle so click navigation does not conflict with drag. Lift elevation, a placeholder gap, target-position feedback, and edge auto-scroll remain legible in every theme.
+- Mouse, touch/stylus, and mobile touch support drag reorder, with an equivalent keyboard path and the current move-up/down controls retained as a fallback. Screen readers receive lift, target-position, drop, and cancel announcements.
+- Dragging maintains temporary visual order only. Cancel, `Escape`, returning to origin, or a no-op drop must not dispatch, advance revision, or persist. A changed drop emits exactly one “move category to target index” domain action, one local revision, and then uses the existing cloud debounce.
+- Desktop uses a centered themed dialog while mobile adapts to narrow viewports and safe areas. The existing three-column/stacked shell, seven themes, eleven font families, and mappings remain unchanged.
+- Add initial focus, focus containment, `Escape` cancellation, focus restoration after submit/cancel, accessible names, and associated validation errors so the entire flow works by keyboard.
+- Category/goal count limits remain enforced both at the entry point and on submit. Concurrent plan changes before submission cannot bypass S6 count, money, or 256 KiB limits.
+
+Tests and manual acceptance:
+
+- Reducer/component regressions cover zero-side-effect open/cancel, empty names, empty/invalid/over-limit amounts, exactly-once valid submit, repeated clicks, 50/500 count boundaries, and a single income update after creation.
+- Domain/component tests cover Roman boundaries `I/IV/IX/XL/L` and moving arbitrary categories to first, middle, and last positions while numbering stays contiguous and stable IDs/goal ownership stay unchanged.
+- Drag regressions cover mouse, touch, and keyboard reorder; card click navigation; no accidental drag from long press/small movement; zero-effect cancel/origin drop; and exactly one domain action and revision across a multi-position move.
+- Repository/synchronization regressions prove cancellation creates no local record or pending revision, while valid submission retains immediate local persistence and cloud-debounce semantics.
+- Real Chrome covers all seven themes; mouse, touch, and keyboard; 320/390/900/1440/2000px widths; 50-category scrolling and auto-scroll; navigation to a new item at the end of a long category; and no horizontal overflow without weakening existing 50-goal, font, PWA, Firebase Emulator, or two-device gates.
+- Manual acceptance covers goal/category dialogs plus category-card Roman numbering, lift hierarchy, drop feedback, mobile touch, cancellation semantics, and post-submit navigation feedback.
+
+Exit criteria:
+
+- Category and goal creation both require completed, confirmed input, and every cancellation path has zero effect on plan data, revision, persistence, and income.
+- The application no longer creates “New goal + `$500`” or “New category” placeholders; one valid submit creates exactly one item.
+- Category markers always show contiguous, non-editable `I`–`L` values from current position. Drag, keyboard, or fallback-button reorder preserves stable IDs, goal ownership, and current selection.
+- Cancelled/origin drops have zero side effects, while a changed drop makes exactly one reorder commit; 50 categories remain scrollable and sortable without conflicting with click navigation.
+- Seven themes, desktop/mobile layouts, keyboard/screen-reader paths, long-list navigation, and all existing cross-phase regressions pass.
+- `npm run verify` is green and the user completes manual acceptance before Phase 8 may be requested.
+
 ## Phase 8 — Release the MVP
+
+Status: Blocked by Phase 7.2 and not started.
 
 Deliverables:
 
@@ -844,6 +1081,8 @@ Exit criteria:
 - [x] Tax source years and limitations are visible.
 - [x] No paid service is required or enabled.
 - [x] Plan-capacity and money limits are handled before Firestore or the tax engine fails.
+- [ ] Creating a category or goal cannot create placeholder data, persist a revision, or change income before confirmation.
+- [ ] Categories show non-editable Roman markers from current position and support mouse, touch, and keyboard drag-style reorder without changing stable identity.
 - [ ] Tests, build, and manual visual acceptance pass.
 
 ## Planned commit sequence
@@ -858,9 +1097,154 @@ Exit criteria:
 8. `feat: add Firestore cross-device sync`
 9. `test: add security sync and visual coverage`
 10. `fix: close cross-phase data and offline lifecycle gaps`
-11. `docs: document deployment privacy and tax assumptions`
+11. `fix: polish creation and category navigation interactions`
+12. `docs: document deployment privacy and tax assumptions`
 
 ## Update log
+
+### 2026-10-06 — Switched the fixed installation icon to Burgundy Antique Gold
+
+- Operating-system installation icons cannot react immediately to in-app theme changes, so the user selected candidate 2, “Burgundy Antique Gold,” as the shared cross-theme brand icon. The top-bar Logo continues to use seven dynamic palettes through `app-icon.svg#theme`; this change updates only the default colors used by the unfragmented SVG and manifest PNGs, without changing Logo geometry, theme data, or interactions.
+- The fixed palette is locked to burgundy-black background `#3A151D/#17070B/#050102`, wine astrolabe `#55242E/#341019`, antique-gold metal and orbits `#CCA34F/#D8B76D`, warm-ivory face `#FFF5DE`, terracotta shadow `#A85F38`, oxblood depth `#270B0F`, and gilded rim `#E1BB63`. The 192px and 512px PNGs were regenerated from the same SVG.
+- The real-Chrome gate now asserts the unthemed static palette while retaining seven-theme pixel differences, the 34px top-bar Logo, fonts, and planner-data stability checks. Static checks covered by `npm run verify:quick` and the complete `npm run verify` pass across 120 unit tests, seven themes, PWA offline behavior, 320–2000px layouts, Firebase Emulator, and two-browser synchronization. Nothing was deployed, committed, or pushed, and Phase 7.2 status is unchanged.
+
+### 2026-10-06 — Removed the arcades and crown gem to strengthen the spotlight emblem
+
+- Manual review found that, at the real `34×34px` top-bar size, the previous arcade and upper diamond consumed too much visual area and left the astrolabe and `W` insufficiently prominent. The production Logo therefore removes the outer arcade, the already-removed inner arcade, and the crown gem instead of surrounding the mark with an architectural outline. Seven-theme recoloring, rounded background, safe-inset border, top-bar footprint, and the complete emblem's outer `1.24×` transform remain unchanged.
+- The spotlight expands to `M170 0h172l91 438H79z`; the Celestial Orbit astrolabe and three-layer `W` now share `translate(256 228) scale(1.36) translate(-256 -246)`, rendering the astrolabe approximately `401px` wide in the 512px artwork. The centered stage grows to `(cx=256, cy=404.9, rx=140, ry=16)` and overlaps the astrolabe by approximately `0.94` local unit to avoid a seam. The production Cinzel Decorative Bold paths, three-layer relief relationship, and `translate(12.7921909 0)` optical correction for the central upper apex remain unchanged.
+- The real-Chrome geometry gate now requires the outer arcade, inner arcade, and crown gem to be absent and locks the enlarged spotlight, astrolabe diameter, stage, central-apex centerline, safe bounds, seven-theme recoloring, and `34×34px` top-bar footprint. The 192px and 512px PWA icons were regenerated from the same SVG; the desktop page and 512px artwork passed visual review, and both `npm run verify:quick` and the complete `npm run verify` pass across 120 unit tests, seven themes, PWA offline behavior, 320–2000px layouts, Firebase Emulator, and two-browser synchronization. Business logic, synchronization, tax behavior, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-06 — Adopted the Celestial Orbit astrolabe and optically centered the central apex
+
+- The user selected candidate 3, “Celestial Orbit,” from the nine astrolabe directions. The production Logo retains its radius-`119` outer ring, single arcade, crown gem, spotlight, symmetric stage, complete-emblem transform, and seven theme palettes; only the former twelve radial spokes are replaced by a radius-`99` guide, three `rx=91/ry=38` elliptical orbits at `0°/+60°/-60°`, three stars, a radius-`43` hub, and a radius-`29` core ring.
+- Review confirmed that the old gate mathematically centered the complete `W` bounds while leaving the dominant face's central upward apex `12.7921909` local units left of the astrolabe centerline. Face, rim, and dark relief now share one `translate(12.7921909 0)` optical correction, placing face source point `(529,-716)` exactly at `x=256`; the three original matrices, the depth layer's relative `(+8,+10)` offset, the shared astrolabe-composition transform, and vertical centering remain unchanged. The bounding box is intentionally no longer treated as the visual center, while the complete glyph remains inside the outer arcade with at least 30 local units of clearance.
+- The real-Chrome gate now locks the celestial-orbit geometry, absence of the old radial spokes, the central-apex centerline, all three glyph matrices, and the assembly optical correction, while retaining the `1.5×` arcade-gap ratio, seven-theme recoloring, `34×34px` top-bar footprint, fonts, and planner-data stability checks. The 192px and 512px PWA icons were regenerated from the same SVG; both `npm run verify:quick` and the complete `npm run verify` pass, covering 120 tests across 19 files, eleven font families/582 WOFF2 files, the production build, seven-theme real Chrome, PWA offline behavior, 320–2000px layouts, Firebase Emulator, and two-browser synchronization. Business logic, synchronization, tax behavior, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-06 — Increased the single-arcade spacing ratio to 1.5
+
+- Manual review found that the `1.2×` top-to-side spacing treatment looked too low. The arcade leg centerlines at `x=91/421`, the upper joins at `y=209`, and every other emblem component remain fixed, while the symmetric crown centerline rises from `y=90.05` to `y=82.625`; both Bézier sides were recalculated in proportion to the new rise to preserve strict mirroring and smooth joins.
+- Measured from visible stroke edges, the rose window's side gap remains `24.75` local units and its top gap becomes `37.125`, for an exact `1.5×` ratio. The crown gem retains `0.325` local units of geometric separation from the arcade; the 512 px, 192 px, and real 34 px top-bar renderings were inspected without clipping, drift, or boundary overflow.
+- The 192 px and 512 px PWA icons were regenerated from the same SVG. The production build and real-Chrome gates for seven-theme geometry and palettes, offline fonts, and data stability pass. Both `npm run verify:quick` and the complete `npm run verify` pass; this trial does not change the rose window, `W`, stage, business logic, synchronization, tax behavior, or Phase 7.2 status, and it has not been deployed, committed, or pushed.
+
+### 2026-10-06 — Lowered the single arcade to a 1.2 spacing ratio
+
+- The arcade leg centerlines at `x=91/421`, their upper joins at `y=209`, and the complete emblem's outer transform remain fixed, while the symmetric crown centerline is lowered from `y=66` to `y=90.05`. Both Bézier control sets are recomputed proportionally for the shorter rise, avoiding a flattened cusp or left-right mismatch.
+- Spacing is measured between visible stroke edges rather than path centerlines. The astrolabe's leftmost edge is `24.75` local units from the left arcade's inner edge, while its top edge is `29.70` below the arcade crown's lower edge. The measured ratio is `1.1999992`, with an automated tolerance no larger than `0.001`. The upper gem stays fixed and is now detached from the lowered arcade by a visible 7.75-unit stroke-edge gap.
+- The astrolabe, `W`, symmetric stage, and stage bottom do not move. Real-path checks retain approximately `34.1` units of centerline clearance from the astrolabe to the arcade and about `43.49` from the `W` to the curved arcade, keeping the complete letter inside. The 192px, 512px, and 34px icons were regenerated and visually checked, and the focused production build plus seven-theme real-Chrome geometry/font gate pass. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+- Both `npm run verify:quick` and the complete `npm run verify` pass: 19 test files with 120 tests, 11 font families with 582 WOFF2 files, production build, seven-theme geometry, PWA offline reopen, 320–2000px extreme content, Firebase Emulator, and two-browser synchronization all remain green.
+
+### 2026-10-06 — Raised the astrolabe and letter while extending the stage from a fixed bottom
+
+- The already shared `1.10×` rose-window astrolabe and Crown Recitative `W` move upward together by 6 local SVG units, changing their shared center from `(256, 266)` to `(256, 260)`. Their relative scale and geometric centering remain unchanged; the outer arcade, upper gem, background beam, safe-inset frame, and outer emblem transform do not move.
+- The stage's lowest point remains fixed at local `y=418.9`, while its horizontal radius stays `99`. To join its upper point to the raised astrolabe's lower edge at `y=390.9`, the ellipse is now centered at `(256, 404.9)` with vertical radius `14`, retaining exact top-bottom symmetry. The geometry gate allows at most `0.11` units of join error.
+- Real-path measurement leaves approximately `34.1` units from the astrolabe to the outer arcade and about `46.35` units from the `W`'s upper-right crown stroke to the curved arcade. The letter still crosses the astrolabe but remains fully inside the outer arcade. The 192px, 512px, and 34px icons were regenerated and visually checked, and the focused production build plus seven-theme real-Chrome geometry/font gate pass. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+- Both `npm run verify:quick` and the complete `npm run verify` pass: 19 test files with 120 tests, 11 font families with 582 WOFF2 files, production build, seven-theme geometry, PWA offline reopen, 320–2000px extreme content, Firebase Emulator, and two-browser synchronization all remain green.
+
+### 2026-10-06 — Proportionally enlarged the astrolabe, letter, and stage
+
+- On top of the accepted single-arcade and raised-gem composition, the rose-window astrolabe, Crown Recitative `W`, and stage base now share a `1.10×` enlargement. The outer arcade, upper gem, background beam, safe-inset frame, complete emblem's outer `1.24×` transform, and `34×34px` top-bar footprint remain unchanged.
+- The astrolabe and `W` remain one concentric group, mapping source center `(256, 246)` to the existing visual center `(256, 266)` before the shared scale; the stage uses the same scale around fixed center `(256, 409)`. The combined glyph bounds therefore stay within `0.001` of the astrolabe center. The upper-right crown stroke and lower-left tail still cross the circular boundary, while the real glyph paths retain approximately `47.8` local units to the outer arcade.
+- Scale probing compared `1.05×` through `1.22×`. The selected `1.10×` increases the astrolabe diameter from 238 to 261.8, leaves approximately `34.1` units to the outer arcade, and retains about `2.2` units of geometric separation from the equally enlarged stage; `1.12×` already introduces astrolabe-stage overlap and was rejected. The 192px, 512px, and 34px results passed visual inspection, plus the focused production build and seven-theme real-browser font/Logo gate. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+- Both `npm run verify:quick` and the complete `npm run verify` pass: 19 test files with 120 tests, 11 font families with 582 WOFF2 files, production build, seven-theme geometry, PWA offline reopen, 320–2000px extreme content, Firebase Emulator, and two-browser synchronization all remain green.
+
+### 2026-10-06 — Raised the crown gem and removed the inner arcade
+
+- Starting from the restored complete emblem at 1.24×, the thinner inner arcade is removed following the latest manual direction. The dominant outer arcade, rose window, Crown Recitative `W`, stage, background beam, safe-inset frame, complete-emblem transform, and `34×34px` top-bar footprint remain unchanged.
+- Moving the original gem upward by the full 44-unit distance between the two arcade crowns would push it beyond the canvas after the complete emblem's 1.24× transform. To preserve the exact former gem-to-inner-arcade intersection without clipping, the gem is proportionally reduced to `32.5×32.5` local units and moved to `x=239.75..272.25`, `y=42.3..74.8`. The outer crown at `y=66` therefore still crosses the gem at `35/48` of its height, while the rendered top retains approximately 12 units of safe inset.
+- The 192px and 512px installation icons are regenerated from the same SVG. The browser gate now requires the inner arcade to be absent, the gem to retain its accepted intersection ratio and safe top inset, and the rose window plus actual glyph paths to retain outer-arcade clearance; it also keeps the complete-emblem 1.24× bounds, balanced vertical margins, seven theme palettes, and `34×34px` top-bar rendering checks. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+- Both `npm run verify:quick` and the complete `npm run verify` pass: 19 test files with 120 tests, 11 font families with 582 WOFF2 files, production build, seven-theme real-browser geometry and offline fonts, 320–2000px extreme-content coverage, PWA offline reopen, Firebase Emulator, and two-browser synchronization all remain green.
+
+### 2026-10-06 — Restored the complete 1.24× double-arcade emblem
+
+- Manual review found the later curtain and bare-astrolabe directions too sparse, so the production trial has been explicitly restored to the documented 2026-10-05 “complete emblem at 1.24×” state: outer arcade, inner arcade, gem, rose window, Crown Recitative `W`, and stage all return with that version's relative proportions intact.
+- The later corner-curtain trial and the extra `1.05×` rose-window/letter enlargement introduced during the single-arcade stage are removed. The complete emblem retains `translate(0 18.4) translate(256 246) scale(1.24) translate(-256 -246)`, while the rose-window/letter group keeps only its twenty-unit downward translation. The outer arcade's visible top margin is approximately `34.38` units and the stage's bottom margin approximately `34.32`; the square background, central light beam, safe-inset frame, and `34×34px` top-bar footprint remain unchanged.
+- The 192px and 512px installation icons are regenerated from the restored SVG. The browser gate again requires both arcades, inner-arcade glyph clearance, complete-emblem 1.24× bounds, balanced outer margins, and seven distinct theme palettes. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Trialed a two-corner theatrical-curtain composition
+
+- Following visual-review direction, the remaining outer arcade was removed, so the current trial retains no arcade line. Strictly mirrored quarter-circle theater drapes now occupy the upper-left and upper-right canvas corners, replacing the full-height architectural outline with corner framing.
+- The curtains are independent of the central-emblem transform. Fabric combines each theme's deep panel and primary accent colors, folds mix in its secondary accent, and the inner curved trim reuses the theme-aware metal highlight, so all seven themes recolor distinctly without obscuring the central rose window. The previous central rose-window, Crown Recitative `W`, gem, and stage positions and proportions remain unchanged.
+- The browser gate now requires both former arcades to be absent, verifies mirrored curtain dimensions, margins, and theme pixel differences, and retains safe-bound checks for the central composition, stage, frame, and 34px top-bar rendering. This remains a visual trial awaiting manual acceptance; business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged, and nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Simplified to one arcade and enlarged the central emblem
+
+- Following visual feedback, the thinner inner arcade was removed so the dominant outer arcade is the only architectural outline, reducing congestion from two arcade curves layered with the rose window. The outer arcade, gem, stage, background beam, safe-inset frame, and overall vertical centering remain unchanged.
+- The rose window, rays, inner rings, and Crown Recitative `W` remain one concentric composition and scale together by `1.05×` around their shared center; the letter is not enlarged independently. The complete enlarged window plus letter face and depth must remain inside the single outer arcade with measurable clearance.
+- The browser gate now requires the inner arcade to be absent and measures joint rose-window/actual-glyph clearance from the outer arcade, while retaining the 1.24 complete-emblem scale, vertical-margin, seven-theme palette, and data-stability assertions. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Proportionally enlarged the balanced Silver Rose Arcade emblem
+
+- After aligning the outer vertical margins, the complete internal emblem—outer and inner arcades, gem, rose window, Crown Recitative letter, and stage—was modestly enlarged from `1.18×` to `1.24×` following visual feedback. The square background, upper light beam, safe-inset frame, and 34px top-bar footprint remain unchanged.
+- To prevent the larger scale from disturbing the vertical balance, the complete emblem's final downward translation was refined from 18 to 18.4 SVG units. The outer arcade's visible upper stroke and the stage's geometric lower edge each retain approximately 34 units to the canvas boundary; horizontal centering and the rose-window-to-`W` relationship remain unchanged.
+- The 192px and 512px installation icons were regenerated from the same SVG. The browser gate now locks the 1.24 scale, 18.4-unit translation, visible vertical margins, inner-arcade clearance, and seven-theme data stability. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Aligned the Silver Rose Arcade's outer vertical margins
+
+- Screenshot review confirmed that the previous adjustment moved only the rose window and `W`, leaving the outer arcade that defines the top boundary and the stage that defines the bottom boundary unchanged. Their visible canvas margins therefore remained approximately 27 units above and 63 below; the existing gate checked only clipping, not optical balance.
+- The background, upper light beam, safe-inset frame, and all internal emblem relationships remain fixed while the complete `logo-emblem`—outer and inner arcades, gem, rose window, Crown Recitative letter, and stage—moves down by eighteen final rendered units. The outer arcade's bright upper edge and the stage's geometric lower edge now each retain approximately 45 units to the canvas boundary.
+- The browser gate now measures those visible top and bottom margins directly and requires their difference to stay within 0.2 SVG units, while retaining the internal-centering, inner-arcade-clearance, horizontal-symmetry, seven-theme palette, and 34px footprint checks. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Balanced the Silver Rose Arcade top and bottom density
+
+- Visual acceptance found that the gem, double arcade crown, rose window, and enlarged letter made the upper half denser than the stage area below. To preserve letter-to-circle centering, the `W` was not moved independently; the rose window, rays, inner rings, and Crown Recitative letter now move together twenty local SVG units downward. A second review increased the initial six-unit adjustment to ten units, and a third review added another ten units.
+- The shared local visual center moves from `(256, 246)` to `(256, 266)`, rendering near `(256, 269.6)` after the outer 1.18× emblem scale. The gem, both arcades, stage base, outer frame, and 34px top-bar footprint remain unchanged, adding further breathing room above while tightening the window-to-stage relationship without eliminating its gap.
+- The browser gate now asserts the composition transform and rendered center while retaining actual-glyph checks for rose-window overlap, inner-arcade clearance, and seven-theme data stability. The 192px and 512px icons were regenerated. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Enlarged Crown Recitative beyond the circular rose window
+
+- Following visual-acceptance feedback, enlarged the central Cinzel Decorative Bold `W` by another 20% within the emblem coordinate system while keeping the combined face-and-depth center exactly at the rose-window center `(256, 246)`. The arcade, rose window, gem, and stage retain their previous positions.
+- The enlarged upper-right crown terminal and lower-left tail now cross the circular rose-window outline, using occlusion to strengthen the foreground relief. The complete face and depth paths remain inside the inner arcade curve. The browser gate now samples the actual glyph paths, requiring the maximum radius to exceed the rose-window radius while every sampled point keeps at least five local SVG units of clearance from the inner arcade.
+- Regenerated and inspected the 192px, 512px, and 34px icons. Seven-theme colors, external top-bar size, page data, and layout remain unchanged. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Enlarged the Silver Rose Arcade emblem to reduce dark gutters
+
+- Following visual-acceptance feedback, kept the icon canvas, rounded background, safe-inset border, and 34×34px top-bar footprint unchanged. Only the internal emblem—the arcade, rose window, Crown Recitative mark, gem, and stage—was uniformly enlarged to 1.18× around the rose-window center at `(256, 246)`.
+- The enlarged emblem retains approximately 61 SVG units of symmetric horizontal breathing room, about 34 units above, and about 63 units below on the 512-unit canvas. The border keeps its independent safe inset, reducing the dark stage area without colliding with the rounded clip. Letter-to-window proportion, relief direction, and seven-theme palette behavior remain unchanged.
+- Regenerated the 192px and 512px PWA icons, with the 34px top-bar preview remaining recognizable. The real-Chrome gate now checks transformed emblem bounds, symmetric horizontal gutters, and frame safety. Top-bar layout, business data, synchronization, tax behavior, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Crown Recitative central mark selected and applied
+
+- The user selected candidate 1, “Crown Recitative,” from three relief and three flat alternatives. The production logo now uses the real Cinzel Decorative Bold `W` outline rather than the previous hand-built geometric approximation. The SIL OFL 1.1 outline is embedded as SVG paths, adding neither a runtime font request nor another application font family.
+- Preserved the candidate's rising crown-like terminal, matte ivory face, fine theme-aware gilded or silver rim, and dark lower-right relief. Face and depth remain symmetrically offset around one center, while the combined bounds stay aligned to the rose window at `(256, 246)` without changing the arcade, rose window, gem, stage base, or 34px top-bar footprint.
+- Regenerated the 192px and 512px PWA icons from the same SVG. The mark remains recognizable at 34px, and seven-theme pixel signatures, Logo DOM geometry, and planner-data stability browser checks pass. Business behavior, synchronization, tax calculations, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Silver Rose Arcade central mark upgraded to a theatrical relief serif
+
+- Without changing the arcade, rose window, crown gem, stage base, 34px top-bar footprint, or seven-theme structure, redrew the central geometric `W` as a path-based high-contrast Roman serif. It has no runtime font dependency, so offline rendering, cross-device output, and generated PNGs remain deterministic.
+- Following further visual feedback, replaced the cold white mirror-metal treatment that read like a gaming badge. The mark is now horizontally condensed toward an opera-poster proportion and uses a low-reflection theme enamel face, fine gilded or silver rim, dark lower-right depth, and restrained top engraving. Face and depth still move equally toward the upper left and lower right, keeping the combined bounds centered at the rose window's `(256, 246)`.
+- Real-Chrome verification exposed lower-half asymmetry in the draft path and a further two-unit visual shift from the face glow. The center skeleton was redrawn and that asymmetric glow removed while retaining a crisper carved relief. The mark stays legible at 192px, 512px, and the 34px top-bar size; all seven theme signatures and SVG DOM geometry checks pass. Business data, synchronization, tax behavior, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Corrected Silver Rose Arcade centering and safe bounds
+
+- Manual review confirmed that the earlier check covered the 34px top-bar footprint but not every internal SVG layer. The original `W` bounding-box center was `(287, 267)`, offset 31 SVG units right and 21 units down from the rose-window center `(256, 246)`, with its right edge extending 23 units beyond the window; this was source geometry rather than browser scaling.
+- Scaled the `W` uniformly to 90% and redrew it around `(256, 246)`, producing symmetric safe gaps of approximately 19.1 horizontal units and 45.2 vertical units inside the rose window. The window gradient now shares `(256, 246)`, the arcade, inner arch, and gem use centered vertical light axes, and the outer border retains a real four-unit inset instead of touching the clip boundary.
+- The real-Chrome font/theme gate now inspects SVG DOM geometry: the outer and inner arches, rose window, `W`, gem, stage, and border must share the horizontal axis; the `W` must retain symmetric safe gaps inside the window; and every light axis must remain at x=256. The 192px and 512px PWA icons were regenerated from the same SVG. Seven-theme color behavior, page layout, business data, and Phase 7.2 status are unchanged; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Silver Rose Arcade logo palette follows all seven themes
+
+- Following user acceptance feedback, retained every Silver Rose Arcade geometry element—the arcade, rose window, gem, stage base, path-based `W`, and 34px top-bar footprint—while making only the production-page palette react immediately to the active theme. Theme switching still changes no plan, navigation, or calculation data.
+- The top bar reuses one external SVG geometry and selects its internal semantic palette through a URL fragment, avoiding both seven duplicated path assets and inlining the complete artwork into initial JavaScript. Rouge Velvet, Blue Midnight, all three Violet Midnight variants, Gold Opera, and Scarlet Opera inherit their own dark field, primary accent, and secondary accent; the automated browser gate verifies seven distinct pixel signatures and a constant 34×34px size.
+- Static PWA installation icons retain the canonical silver-violet treatment because browser and operating-system icons cannot react to in-app theme state. This extends the approved logo behavior only, without changing information architecture or Phase 7.2 status; nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Trial installation of the Silver Rose Arcade brand icon
+
+- Applied Logo candidate 4, “Silver Rose Arcade,” to the production top bar and PWA installation assets for local visual acceptance. The top bar retains its 34px footprint and navigation semantics, with no change to the three-column information architecture, theme data, or calculation behavior.
+- The production SVG is self-contained and combines a midnight-blue field, double silver crown arcade, radial rose window, violet crown gem, stage base, and path-based `W`. A new `npm run icons:sync` command reproducibly generates the 192px and 512px PNGs from that single SVG through local Chrome so the three icon assets cannot drift through manual editing.
+- This is a brand trial awaiting manual acceptance, not a final Logo lock or Phase 7.2 implementation-status advance. Nothing was deployed, committed, or pushed.
+
+### 2026-10-05 — Phase 7.2 scope expanded for category numbering and drag reorder
+
+- The user confirmed that category icons are no longer editable content: every category displays a canonical uppercase Roman numeral `I`–`L` from its current one-based sequence position. The marker is derived presentation, not identity; reordering changes numerals while stable IDs, goal ownership, and current selection remain intact.
+- The left category list becomes sortable cards for mouse, touch/stylus, and keyboard, while retaining move-up/down fallback controls. Drag uses temporary visual state; cancel or origin drop has zero side effects, and only a changed drop emits one target-index reorder and one revision.
+- The schema-v1 `icon` field remains for old JSON compatibility but leaves editing and display paths; no schema migration is introduced. Tests and manual acceptance now cover Roman boundaries, 50-category scrolling, auto-scroll, stable IDs, click/drag conflict, themed drag states, and mobile touch.
+- Phase 7.2 and its planned commit now cover creation and category-navigation interaction polish. Phase 8 remains blocked. This update changes plans and constraints only; no product code, Firebase connection, deployment, commit, or push is included.
+
+### 2026-10-05 — Phase 7.2 confirmed item-creation interaction polish planned
+
+- S8 was pushed to `origin/main` as commit `91ce59f`; the post-push complete `npm run verify`, code-level audit, and dependency audit passed, leaving a clean working tree for this plan update.
+- Local manual acceptance found that “Add item” immediately writes “New goal + `$500/month`” and “Add category” immediately writes “New category.” This advances revision, persists placeholders, and changes income before confirmation, while long lists provide weak feedback. Phase 8 is therefore paused and Phase 7.2 is added to close creation semantics first.
+- Phase 7.2 uses seven-theme category/goal dialogs and temporary UI drafts. Cancel and validation failure have zero side effects, while one valid submit enters the existing Domain/action, immediate-local-save, and cloud-debounce path. Delete-flow redesign, tax rules, synchronization protocols, themes/fonts, and the three-column information architecture remain out of scope.
+- Verification covers components, Repository/synchronization, and real Chrome across seven themes, keyboard operation, 320–2000px widths, and long-list navigation. The complete gate and user manual acceptance must pass before Phase 8. This update changes plans and constraints only; no product code, Firebase connection, deployment, commit, or push is included.
 
 ### 2026-10-02 — Phase 7.1 S8 authoritative cross-phase gate and final re-audit completed
 

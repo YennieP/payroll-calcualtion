@@ -1,6 +1,7 @@
-/* global caches, document, getComputedStyle */
+/* global caches, document, DOMPoint, getComputedStyle, HTMLImageElement */
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -281,6 +282,7 @@ try {
     },
   ];
   const themeSurfaceSignatures = new Set();
+  const themeLogoSignatures = new Set();
 
   for (const theme of themes) {
     await page.getByRole("button", { name: /主题/ }).click();
@@ -301,10 +303,14 @@ try {
       const main = document.querySelector(".planner-main");
       const income = document.querySelector(".income-panel");
       const incomeNumber = document.querySelector(".income-panel > strong");
+      const logo = document.querySelector(".logo-mark");
       return {
         theme: stage?.getAttribute("data-theme"),
         bodyFont: planner ? getComputedStyle(planner).fontFamily : "",
         numberFont: incomeNumber ? getComputedStyle(incomeNumber).fontFamily : "",
+        logoWidth: logo ? getComputedStyle(logo).width : "",
+        logoHeight: logo ? getComputedStyle(logo).height : "",
+        logoFragment: logo instanceof HTMLImageElement ? new URL(logo.src).hash : "",
         signature: [nav, main, income]
           .map((element) => (element ? getComputedStyle(element).backgroundImage : ""))
           .join("|"),
@@ -326,7 +332,20 @@ try {
     if (!themeState.signature.includes("radial-gradient")) {
       throw new Error(`Theme ${theme.id} did not render textured three-column surfaces.`);
     }
+    if (themeState.logoWidth !== "34px" || themeState.logoHeight !== "34px") {
+      throw new Error(
+        `Theme ${theme.id} logo measured ${themeState.logoWidth} x ${themeState.logoHeight}; expected 34px x 34px.`,
+      );
+    }
+    if (themeState.logoFragment !== `#${theme.id}`) {
+      throw new Error(
+        `Theme ${theme.id} loaded logo fragment ${themeState.logoFragment || "none"}.`,
+      );
+    }
+    const logoScreenshot = await page.locator(".logo-mark").screenshot();
+    const logoSignature = createHash("sha256").update(logoScreenshot).digest("hex");
     themeSurfaceSignatures.add(themeState.signature);
+    themeLogoSignatures.add(logoSignature);
   }
 
   if (themeSurfaceSignatures.size !== themes.length) {
@@ -334,6 +353,357 @@ try {
       `Expected 7 distinct three-column theme treatments, found ${themeSurfaceSignatures.size}.`,
     );
   }
+  if (themeLogoSignatures.size !== themes.length) {
+    throw new Error(`Expected 7 distinct logo palettes, found ${themeLogoSignatures.size}.`);
+  }
+
+  const iconPage = await context.newPage();
+  await iconPage.goto(`http://127.0.0.1:${port}/payroll-calcualtion/icons/app-icon.svg#rouge`, {
+    waitUntil: "networkidle",
+  });
+  await iconPage.locator("#logo-letter").waitFor({ timeout: 30_000 });
+  const iconGeometry = await iconPage.evaluate(() => {
+    const box = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element || typeof element.getBBox !== "function") return null;
+      const bounds = element.getBBox();
+      return {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        centerX: bounds.x + bounds.width / 2,
+        centerY: bounds.y + bounds.height / 2,
+      };
+    };
+    const renderedBox = (selector) => {
+      const element = document.querySelector(selector);
+      const root = document.documentElement;
+      if (
+        !element ||
+        typeof element.getBBox !== "function" ||
+        typeof element.getCTM !== "function" ||
+        typeof root.getCTM !== "function"
+      ) {
+        return null;
+      }
+      const bounds = element.getBBox();
+      const elementMatrix = element.getCTM();
+      const rootMatrix = root.getCTM();
+      if (!elementMatrix || !rootMatrix) return null;
+      const matrix = rootMatrix.inverse().multiply(elementMatrix);
+      const corners = [
+        new DOMPoint(bounds.x, bounds.y),
+        new DOMPoint(bounds.x + bounds.width, bounds.y),
+        new DOMPoint(bounds.x, bounds.y + bounds.height),
+        new DOMPoint(bounds.x + bounds.width, bounds.y + bounds.height),
+      ].map((point) => point.matrixTransform(matrix));
+      const xs = corners.map((point) => point.x);
+      const ys = corners.map((point) => point.y);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      const width = Math.max(...xs) - x;
+      const height = Math.max(...ys) - y;
+      return { x, y, width, height, centerX: x + width / 2, centerY: y + height / 2 };
+    };
+    const pointRelativeToEmblem = (selector, x, y) => {
+      const element = document.querySelector(selector);
+      const emblem = document.querySelector("#logo-emblem");
+      if (
+        !element ||
+        !emblem ||
+        typeof element.getCTM !== "function" ||
+        typeof emblem.getCTM !== "function"
+      ) {
+        return null;
+      }
+      const elementMatrix = element.getCTM();
+      const emblemMatrix = emblem.getCTM();
+      if (!elementMatrix || !emblemMatrix) return null;
+      const matrix = emblemMatrix.inverse().multiply(elementMatrix);
+      return new DOMPoint(x, y).matrixTransform(matrix);
+    };
+    const samplePath = (selector, samples) => {
+      const path = document.querySelector(selector);
+      const emblem = document.querySelector("#logo-emblem");
+      if (
+        !path ||
+        !emblem ||
+        typeof path.getTotalLength !== "function" ||
+        typeof path.getPointAtLength !== "function" ||
+        typeof path.getCTM !== "function" ||
+        typeof emblem.getCTM !== "function"
+      ) {
+        return [];
+      }
+      const pathMatrix = path.getCTM();
+      const emblemMatrix = emblem.getCTM();
+      if (!pathMatrix || !emblemMatrix) return [];
+      const matrix = emblemMatrix.inverse().multiply(pathMatrix);
+      const length = path.getTotalLength();
+      return Array.from({ length: samples + 1 }, (_, index) => {
+        const point = path.getPointAtLength((length * index) / samples);
+        return new DOMPoint(point.x, point.y).matrixTransform(matrix);
+      });
+    };
+    const boundsFromPoints = (points) => {
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      const width = Math.max(...xs) - x;
+      const height = Math.max(...ys) - y;
+      return { x, y, width, height, centerX: x + width / 2, centerY: y + height / 2 };
+    };
+    const letterPoints = [
+      ...samplePath("#logo-letter", 720),
+      ...samplePath(".logo-letter-depth", 720),
+    ];
+    const windowPoints = samplePath("#logo-window-ring", 720);
+    const stagePoints = samplePath("#logo-stage-base", 720);
+    const windowCenter =
+      pointRelativeToEmblem("#logo-window-ring", 256, 246) ?? new DOMPoint(256, 228);
+    const letterVisualAnchor =
+      pointRelativeToEmblem("#logo-letter", 529, -716) ?? new DOMPoint(Number.NaN, Number.NaN);
+    const maxLetterRadius = letterPoints.reduce(
+      (maximum, point) =>
+        Math.max(maximum, Math.hypot(point.x - windowCenter.x, point.y - windowCenter.y)),
+      0,
+    );
+    const attribute = (selector, name) => document.querySelector(selector)?.getAttribute(name);
+    return {
+      emblem: renderedBox("#logo-emblem"),
+      windowComposition: renderedBox("#logo-window-composition"),
+      windowRendered: renderedBox("#logo-window-ring"),
+      stageRendered: renderedBox("#logo-stage-base"),
+      beamRendered: renderedBox("#logo-light-beam"),
+      outerArchPresent: Boolean(document.querySelector("#logo-outer-arch")),
+      innerArchPresent: Boolean(document.querySelector("#logo-inner-arch")),
+      crownGemPresent: Boolean(document.querySelector("#logo-gem-outline")),
+      window: boundsFromPoints(windowPoints),
+      letter: boundsFromPoints(letterPoints),
+      stage: boundsFromPoints(stagePoints),
+      border: box("#logo-border"),
+      maxLetterRadius,
+      emblemTransform: attribute("#logo-emblem", "transform"),
+      windowCompositionTransform: attribute("#logo-window-composition", "transform"),
+      lightBeamPath: attribute("#logo-light-beam", "d"),
+      stageGeometry: ["cx", "cy", "rx", "ry"].map((name) => attribute("#logo-stage-base", name)),
+      windowCenter: { x: windowCenter.x, y: windowCenter.y },
+      letterVisualAnchor: { x: letterVisualAnchor.x, y: letterVisualAnchor.y },
+      windowGradient: attribute("#window", "gradientTransform"),
+      metalAxis: [attribute("#metal", "x1"), attribute("#metal", "x2")],
+      windowStrokeWidth: Number(attribute("#logo-window-ring", "stroke-width")) * 1.36,
+      letterAssemblyTransform: attribute("#logo-letter-assembly", "transform"),
+      letterVisualAnchorSource: attribute("#logo-letter-assembly", "data-visual-anchor-source"),
+      letterFaceTransform: attribute("#logo-letter", "transform"),
+      letterDepthTransform: attribute(".logo-letter-depth", "transform"),
+      letterRimTransform: attribute(".logo-letter-rim", "transform"),
+      orbitGeometry: [...document.querySelectorAll("#logo-window-orbits ellipse")].map((orbit) =>
+        ["cx", "cy", "rx", "ry", "transform"]
+          .map((name) => orbit.getAttribute(name) ?? "")
+          .join("|"),
+      ),
+      starGeometry: [...document.querySelectorAll("#logo-window-stars circle")].map((star) =>
+        ["cx", "cy", "r"].map((name) => star.getAttribute(name) ?? "").join("|"),
+      ),
+      windowGuideRadius: attribute("#logo-window-guide", "r"),
+      windowHubRadius: attribute("#logo-window-hub", "r"),
+      windowCoreRadius: attribute("#logo-window-core", "r"),
+      radialRaysPresent: Boolean(document.querySelector(".logo-window-rays")),
+    };
+  });
+  const centeredX = [iconGeometry.window, iconGeometry.stage, iconGeometry.border];
+  if (centeredX.some((bounds) => !bounds || Math.abs(bounds.centerX - 256) > 0.11)) {
+    throw new Error(
+      `Logo components are not horizontally centered: ${JSON.stringify(iconGeometry)}`,
+    );
+  }
+  if (
+    !iconGeometry.letter ||
+    !iconGeometry.window ||
+    Math.abs(iconGeometry.letter.centerY - iconGeometry.window.centerY) > 0.11 ||
+    Math.abs(iconGeometry.letterVisualAnchor.x - iconGeometry.window.centerX) > 0.11 ||
+    iconGeometry.letterAssemblyTransform !== "translate(12.7921909 0)" ||
+    iconGeometry.letterVisualAnchorSource !== "529 -716" ||
+    iconGeometry.letterFaceTransform !== "matrix(.1598579 0 0 .1598579 158.64298 302.22558)" ||
+    iconGeometry.letterDepthTransform !== "matrix(.1598579 0 0 .1598579 166.64298 312.22558)" ||
+    iconGeometry.letterRimTransform !== "matrix(.1598579 0 0 .1598579 158.64298 302.22558)"
+  ) {
+    throw new Error(
+      `Logo W visual apex is not centered relative to the astrolabe, or its relief layers drifted: ${JSON.stringify({ letter: iconGeometry.letter, window: iconGeometry.window, visualAnchor: iconGeometry.letterVisualAnchor, assemblyTransform: iconGeometry.letterAssemblyTransform })}`,
+    );
+  }
+  if (!iconGeometry.window || !iconGeometry.letter) {
+    throw new Error("Logo geometry bounds are unavailable.");
+  }
+  const horizontalGaps = [
+    iconGeometry.letter.x - iconGeometry.window.x,
+    iconGeometry.window.x +
+      iconGeometry.window.width -
+      iconGeometry.letter.x -
+      iconGeometry.letter.width,
+  ];
+  const verticalGaps = [
+    iconGeometry.letter.y - iconGeometry.window.y,
+    iconGeometry.window.y +
+      iconGeometry.window.height -
+      iconGeometry.letter.y -
+      iconGeometry.letter.height,
+  ];
+  const windowRadius = iconGeometry.window.width / 2;
+  const windowStageGap = iconGeometry.stage.y - iconGeometry.window.y - iconGeometry.window.height;
+  if (
+    horizontalGaps[0] < 39 ||
+    horizontalGaps[0] > 40 ||
+    horizontalGaps[1] < 4.4 ||
+    horizontalGaps[1] > 5.2 ||
+    verticalGaps.some((gap) => gap < 32.3 || gap > 33) ||
+    Math.abs(verticalGaps[0] - verticalGaps[1]) > 0.25 ||
+    iconGeometry.maxLetterRadius < windowRadius + 18 ||
+    Math.abs(windowStageGap + 0.94) > 0.11
+  ) {
+    throw new Error(
+      `Archless astrolabe, visually anchored W, and stage do not keep the intended enlarged proportions and continuous join: ${JSON.stringify({ horizontalGaps, verticalGaps, windowRadius, maxLetterRadius: iconGeometry.maxLetterRadius, windowStageGap })}`,
+    );
+  }
+  if (
+    iconGeometry.radialRaysPresent ||
+    iconGeometry.windowGuideRadius !== "99" ||
+    iconGeometry.windowHubRadius !== "43" ||
+    iconGeometry.windowCoreRadius !== "29" ||
+    iconGeometry.orbitGeometry.join(";") !==
+      "256|246|91|38|;256|246|91|38|rotate(60 256 246);256|246|91|38|rotate(-60 256 246)" ||
+    iconGeometry.starGeometry.join(";") !== "347|246|6;210.5|167.2|5;210.5|324.8|5"
+  ) {
+    throw new Error(
+      `Celestial-orbit astrolabe geometry drifted: ${JSON.stringify({ orbits: iconGeometry.orbitGeometry, stars: iconGeometry.starGeometry, guide: iconGeometry.windowGuideRadius, hub: iconGeometry.windowHubRadius, core: iconGeometry.windowCoreRadius, radialRaysPresent: iconGeometry.radialRaysPresent })}`,
+    );
+  }
+  if (
+    iconGeometry.outerArchPresent ||
+    iconGeometry.innerArchPresent ||
+    iconGeometry.crownGemPresent
+  ) {
+    throw new Error(
+      `Archless logo restored a removed arcade or crown gem: ${JSON.stringify({ outerArchPresent: iconGeometry.outerArchPresent, innerArchPresent: iconGeometry.innerArchPresent, crownGemPresent: iconGeometry.crownGemPresent })}`,
+    );
+  }
+  if (
+    iconGeometry.windowGradient !== "translate(256 246) rotate(90) scale(126)" ||
+    iconGeometry.metalAxis.join("|") !== "256|256"
+  ) {
+    throw new Error(`Logo light axes are not centered: ${JSON.stringify(iconGeometry)}`);
+  }
+  if (
+    iconGeometry.lightBeamPath !== "M170 0h172l91 438H79z" ||
+    !iconGeometry.beamRendered ||
+    iconGeometry.beamRendered.x > 79.1 ||
+    iconGeometry.beamRendered.x + iconGeometry.beamRendered.width < 432.9 ||
+    iconGeometry.beamRendered.y > 0.1 ||
+    iconGeometry.beamRendered.y + iconGeometry.beamRendered.height < 437.9
+  ) {
+    throw new Error(
+      `Logo spotlight is not broad enough for the enlarged archless composition: ${JSON.stringify({ path: iconGeometry.lightBeamPath, bounds: iconGeometry.beamRendered })}`,
+    );
+  }
+  if (
+    !iconGeometry.border ||
+    iconGeometry.border.x < 8 ||
+    iconGeometry.border.y < 8 ||
+    iconGeometry.border.x + iconGeometry.border.width > 504 ||
+    iconGeometry.border.y + iconGeometry.border.height > 504
+  ) {
+    throw new Error(
+      `Logo border does not retain its safe inset: ${JSON.stringify(iconGeometry.border)}`,
+    );
+  }
+  if (!iconGeometry.emblem) {
+    throw new Error("Rendered logo emblem bounds are unavailable.");
+  }
+  if (
+    !iconGeometry.windowComposition ||
+    iconGeometry.windowCompositionTransform !==
+      "translate(256 228) scale(1.36) translate(-256 -246)" ||
+    iconGeometry.stageGeometry.join("|") !== "256|404.9|140|16" ||
+    Math.abs(iconGeometry.windowComposition.centerX - 256) > 0.2 ||
+    Math.abs(iconGeometry.windowComposition.centerY - 242.08) > 0.3 ||
+    Math.abs(iconGeometry.windowCenter.x - 256) > 0.11 ||
+    Math.abs(iconGeometry.windowCenter.y - 228) > 0.11 ||
+    Math.abs(iconGeometry.stage.centerX - 256) > 0.11 ||
+    Math.abs(iconGeometry.stage.centerY - 404.9) > 0.11 ||
+    Math.abs(iconGeometry.stage.y + iconGeometry.stage.height - 420.9) > 0.11
+  ) {
+    throw new Error(
+      `Logo astrolabe and visually anchored letter are not centered in the enlarged archless composition, or the widened symmetric stage drifted: ${JSON.stringify({ windowComposition: iconGeometry.windowComposition, transform: iconGeometry.windowCompositionTransform, windowCenter: iconGeometry.windowCenter, visualAnchor: iconGeometry.letterVisualAnchor, stage: iconGeometry.stage, stageGeometry: iconGeometry.stageGeometry, windowStageGap })}`,
+    );
+  }
+  if (!iconGeometry.windowRendered || !iconGeometry.stageRendered) {
+    throw new Error("Rendered logo boundary geometry is unavailable.");
+  }
+  const windowRenderedDiameter = iconGeometry.windowRendered.width;
+  const emblemHorizontalGaps = [
+    iconGeometry.emblem.x,
+    512 - iconGeometry.emblem.x - iconGeometry.emblem.width,
+  ];
+  const emblemVerticalGaps = [
+    iconGeometry.emblem.y,
+    512 - iconGeometry.emblem.y - iconGeometry.emblem.height,
+  ];
+  if (
+    iconGeometry.emblemTransform !==
+      "translate(0 18.4) translate(256 246) scale(1.24) translate(-256 -246)" ||
+    windowRenderedDiameter < 400 ||
+    windowRenderedDiameter > 402 ||
+    emblemHorizontalGaps.some((gap) => gap < 55 || gap > 57) ||
+    Math.abs(emblemHorizontalGaps[0] - emblemHorizontalGaps[1]) > 0.2 ||
+    emblemVerticalGaps[0] < 40 ||
+    emblemVerticalGaps[0] > 43 ||
+    emblemVerticalGaps[1] < 30 ||
+    emblemVerticalGaps[1] > 32 ||
+    iconGeometry.emblem.y + iconGeometry.emblem.height > 482
+  ) {
+    throw new Error(
+      `Archless logo does not keep the enlarged astrolabe and stage within the safe complete-emblem bounds: ${JSON.stringify({ emblem: iconGeometry.emblem, window: iconGeometry.windowRendered, stage: iconGeometry.stageRendered, emblemHorizontalGaps, emblemVerticalGaps, transform: iconGeometry.emblemTransform })}`,
+    );
+  }
+
+  await iconPage.goto(`http://127.0.0.1:${port}/payroll-calcualtion/icons/app-icon.svg`, {
+    waitUntil: "networkidle",
+  });
+  await iconPage.locator("#logo-letter").waitFor({ timeout: 30_000 });
+  const staticIconPalette = await iconPage.evaluate(() => {
+    const computedColor = (selector, property) => {
+      const element = document.querySelector(selector);
+      return element ? getComputedStyle(element)[property] : null;
+    };
+    return {
+      background: computedColor(".logo-background-start", "stopColor"),
+      astrolabe: computedColor(".logo-window-center", "stopColor"),
+      metal: computedColor(".logo-metal-mid", "stopColor"),
+      orbit: computedColor(".logo-window-orbits", "stroke"),
+      letterFace: computedColor(".logo-letter-face-light", "stopColor"),
+      letterShadow: computedColor(".logo-letter", "stroke"),
+      letterDepth: computedColor(".logo-letter-depth", "stroke"),
+      letterRim: computedColor(".logo-letter-rim", "stroke"),
+    };
+  });
+  const acceptedStaticIconPalette = {
+    background: "rgb(58, 21, 29)",
+    astrolabe: "rgb(85, 36, 46)",
+    metal: "rgb(204, 163, 79)",
+    orbit: "rgb(216, 183, 109)",
+    letterFace: "rgb(255, 245, 222)",
+    letterShadow: "rgb(168, 95, 56)",
+    letterDepth: "rgb(39, 11, 15)",
+    letterRim: "rgb(225, 187, 99)",
+  };
+  if (JSON.stringify(staticIconPalette) !== JSON.stringify(acceptedStaticIconPalette)) {
+    throw new Error(
+      `Static PWA icon did not retain the accepted Burgundy Antique Gold palette: ${JSON.stringify(staticIconPalette)}`,
+    );
+  }
+  await iconPage.close();
 
   await page.getByRole("button", { name: /主题/ }).click();
   await page

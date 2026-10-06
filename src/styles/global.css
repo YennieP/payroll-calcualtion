@@ -374,15 +374,16 @@ button:disabled {
   white-space: nowrap;
 }
 
-.logo i {
+.logo-mark {
   width: 34px;
   height: 34px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: 0 0 34px;
   border-radius: var(--radius);
-  color: var(--accent-ink);
-  background: var(--accent);
-  font-style: normal;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--panel-ink) 24%, transparent),
+    0 5px 14px color-mix(in srgb, var(--bg) 62%, transparent);
 }
 
 .search-control {

@@ -35,7 +35,12 @@ export function TopBar({ state, dispatch, createMetadata, isOnline, accountContr
         aria-label="返回置顶主页"
         onClick={() => dispatch({ type: "navigate-pinned" })}
       >
-        <i aria-hidden="true">W</i>
+        <img
+          className="logo-mark"
+          src={`${import.meta.env.BASE_URL}icons/app-icon.svg#${theme.id}`}
+          alt=""
+          aria-hidden="true"
+        />
         <span>WORTHWHILE</span>
       </button>
 

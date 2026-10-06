@@ -1,6 +1,6 @@
 # Development constraints
 
-Last updated: 2026-09-30
+Last updated: 2026-10-06
 
 ## 1. MVP objective
 
@@ -67,12 +67,22 @@ The MVP must work on phones and desktop computers, synchronize data between them
 - Treat the accepted demo as the source of truth for the desktop shell, navigation hierarchy, pinned screen, category screen, income panel, theme behavior, and general visual personality.
 - Preserve all seven approved themes: Rouge Velvet, Blue Midnight, Violet/Amber, Violet/Crimson, Violet/Electric Blue, Gold Opera, and Scarlet Opera.
 - Theme changes must not modify plan data, navigation data, pin state, or calculation results.
+- Preserve the accepted archless Silver Rose spotlight composition, internal safe margins, and 34 px top-bar footprint.
+  - The outer arcade, former inner arcade, and crown gem must remain absent. Keep the complete internal emblem transform at `translate(0 18.4) translate(256 246) scale(1.24) translate(-256 -246)` while leaving the square background, rounded clip, and safe-inset border fixed.
+  - Keep the broadened theatrical light beam at `M170 0h172l91 438H79z`. It must reach the top edge and illuminate the enlarged astrolabe and stage without becoming a new opaque panel or reducing the seven themes to one palette.
+  - Keep the astrolabe and central letter inside the shared `translate(256 228) scale(1.36) translate(-256 -246)` composition. At the final outer transform, the astrolabe renders at approximately 401 px across the 512 px source while remaining horizontally centered and inside the safe border. The accepted “Celestial Orbit” astrolabe retains outer radius `119`, guide radius `99`, three `rx=91/ry=38` orbits at `0°/+60°/-60°`, stars at `(347,246)`, `(210.5,167.2)`, and `(210.5,324.8)`, hub radius `43`, and core radius `29`; do not restore the former twelve radial spokes.
+  - Optical centering is defined by the dominant face's central upward apex, not the complete glyph bounding box. Keep the Crown Recitative assembly correction `translate(12.7921909 0)` so the face-path source point `(529,-716)` lands exactly on astrolabe centerline `x=256`; the face and rim retain their original matrix, the depth retains its original `(+8,+10)` relief offset, and all three layers move together. Do not re-center the `W` by bounding box or move its layers independently.
+  - Keep the stage horizontally centered as a vertically symmetric ellipse at `(256,404.9)` with `rx=140` and `ry=16`. Its upper point overlaps the enlarged astrolabe centerline geometry by approximately `0.94` local unit to avoid a visible seam, while its lower point remains at local `y=420.9` and inside the safe border after the outer transform.
+  - Keep the accepted “Crown Recitative” central mark: the Cinzel Decorative Bold `W` outline embedded as self-contained SVG paths under SIL OFL 1.1, with a theatrical relief assembly, matte theme-aware ivory face, fine gilded or silver rim, and dark lower-right depth. The enlarged letter crosses the circular astrolabe outline to reinforce foreground depth while its complete face and depth paths remain inside the clipped icon canvas. Avoid substituting another runtime font, restoring a broad cold-chrome face, or adding a one-sided glow. Its in-app palette follows the active theme's established colors. Because operating-system icons cannot react to application theme state, static PWA installation icons use the accepted “Burgundy Antique Gold” brand palette: burgundy-black background `#3A151D/#17070B/#050102`, wine astrolabe `#55242E/#341019`, antique gold `#CCA34F/#D8B76D`, warm ivory face `#FFF5DE`, terracotta shadow `#A85F38`, oxblood depth `#270B0F`, and gilded rim `#E1BB63`.
 - Preserve the dark top bar, light or theme-specific center surface, side-panel relationships, and approved local gradient treatment.
 - On desktop, the application itself must span the browser width. Use the responsive three-column grid `clamp(210px, 18vw, 360px) minmax(0, 1fr) clamp(290px, 22vw, 440px)`; do not restore a fixed 1180 px application with stage-color or solid-color outer gutters.
 - Stack navigation, content, and income panels below 900 px. Column widths, padding, cards, tables, and typography must adapt without horizontal clipping.
 - Keep top-bar controls visually balanced with the 34 px logo mark.
 - The layout must remain clean with approximately 50 goals and must not clip, overlap, or overflow at supported widths.
 - All visible primary controls must either work in the MVP or be removed before release; decorative dead controls are not allowed.
+- Creating a category or goal must use a confirmation-based, theme-aware dialog. Opening or cancelling the dialog must not create placeholder data, advance a revision, persist a record, or change calculated income. A valid submit creates exactly one item through the existing domain command path.
+- Category markers are not user-editable content. Derive uppercase Roman numerals `I` through `L` from the category's current one-based sequence position everywhere a category marker is shown; reordering changes the displayed numeral but never the category's stable identity.
+- The left category list must present sortable card-like items with pointer and touch drag handles plus an equivalent keyboard reorder path. A cancelled or no-op drag must not mutate or persist the plan; one changed drop produces one semantic reorder and one local revision.
 - Maintain keyboard access, visible focus, meaningful labels, and readable contrast in every theme.
 
 ## 5. Font constraints

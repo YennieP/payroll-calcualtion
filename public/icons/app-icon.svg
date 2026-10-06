@@ -1,6 +1,205 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
   <title id="title">Worthwhile</title>
-  <rect width="512" height="512" fill="#130713" />
-  <rect x="96" y="96" width="320" height="320" fill="#bd174f" />
-  <path d="M144 164h52l41 184 46-146h35l45 146 41-184h52l-64 232h-51l-40-127-41 127h-51z" fill="#fff5eb" />
+  <desc id="description">A broad theatrical spotlight illuminates an enlarged celestial-orbit astrolabe, dramatic W, and stage.</desc>
+  <!-- The W outline is derived from Cinzel Decorative Bold by Natanael Gama, licensed under SIL OFL 1.1, and embedded as paths for deterministic offline rendering. -->
+  <style>
+    .theme-marker { display: none; }
+
+    .theme-marker:target ~ defs,
+    .theme-marker:target ~ .logo-artwork {
+      --logo-bg-start: color-mix(in srgb, var(--theme-accent) 30%, var(--theme-bg));
+      --logo-bg-middle: var(--theme-bg);
+      --logo-bg-end: color-mix(in srgb, var(--theme-panel) 48%, var(--theme-bg));
+      --logo-glow: var(--theme-accent);
+      --logo-metal-light: var(--theme-light);
+      --logo-metal-mid: var(--theme-accent2);
+      --logo-metal-shadow: color-mix(in srgb, var(--theme-accent) 72%, var(--theme-bg));
+      --logo-window-center: color-mix(in srgb, var(--theme-accent2) 18%, var(--theme-soft));
+      --logo-window-mid: color-mix(in srgb, var(--theme-accent) 72%, var(--theme-bg));
+      --logo-window-edge: var(--theme-bg);
+      --logo-glyph: var(--theme-light);
+      --logo-ray: color-mix(in srgb, var(--theme-light) 62%, var(--theme-accent2));
+      --logo-letter-light: color-mix(in srgb, var(--theme-light) 84%, var(--theme-accent2));
+      --logo-letter-mid: color-mix(in srgb, var(--theme-light) 62%, var(--theme-accent2));
+      --logo-letter-shadow: color-mix(in srgb, var(--theme-accent2) 58%, var(--theme-accent));
+      --logo-letter-depth: color-mix(in srgb, var(--theme-panel) 72%, var(--theme-bg));
+      --logo-letter-rim: color-mix(in srgb, var(--theme-light) 74%, var(--theme-accent2));
+    }
+
+    #rouge:target ~ defs,
+    #rouge:target ~ .logo-artwork {
+      --theme-bg: #3e0b20;
+      --theme-soft: #f1c6bd;
+      --theme-accent: #d62d2a;
+      --theme-accent2: #f0c467;
+      --theme-panel: #6f1534;
+      --theme-light: #fff4e8;
+    }
+
+    #midnight:target ~ defs,
+    #midnight:target ~ .logo-artwork {
+      --theme-bg: #080b18;
+      --theme-soft: #0a1025;
+      --theme-accent: #62b0ff;
+      --theme-accent2: #ffdd86;
+      --theme-panel: #1c1042;
+      --theme-light: #f8f4ff;
+    }
+
+    #violet-amber:target ~ defs,
+    #violet-amber:target ~ .logo-artwork {
+      --theme-bg: #080411;
+      --theme-soft: #0d0918;
+      --theme-accent: #d47cff;
+      --theme-accent2: #f4c96b;
+      --theme-panel: #3b116d;
+      --theme-light: #fffaff;
+    }
+
+    #violet-crimson:target ~ defs,
+    #violet-crimson:target ~ .logo-artwork {
+      --theme-bg: #080411;
+      --theme-soft: #0d0918;
+      --theme-accent: #d47cff;
+      --theme-accent2: #ff6078;
+      --theme-panel: #511052;
+      --theme-light: #fffaff;
+    }
+
+    #violet-blue:target ~ defs,
+    #violet-blue:target ~ .logo-artwork {
+      --theme-bg: #080411;
+      --theme-soft: #0d0918;
+      --theme-accent: #d47cff;
+      --theme-accent2: #54a8ff;
+      --theme-panel: #341676;
+      --theme-light: #fffaff;
+    }
+
+    #gold-opera:target ~ defs,
+    #gold-opera:target ~ .logo-artwork {
+      --theme-bg: #130713;
+      --theme-soft: #280d28;
+      --theme-accent: #bd174f;
+      --theme-accent2: #e0b84f;
+      --theme-panel: #120811;
+      --theme-light: #fff5eb;
+    }
+
+    #scarlet-opera:target ~ defs,
+    #scarlet-opera:target ~ .logo-artwork {
+      --theme-bg: #170305;
+      --theme-soft: #2a070b;
+      --theme-accent: #bd1020;
+      --theme-accent2: #f1bf65;
+      --theme-panel: #790818;
+      --theme-light: #fff4e8;
+    }
+
+    .logo-background-start { stop-color: var(--logo-bg-start, #3a151d); }
+    .logo-background-middle { stop-color: var(--logo-bg-middle, #17070b); }
+    .logo-background-end { stop-color: var(--logo-bg-end, #050102); }
+    .logo-glow-start { stop-color: var(--logo-glow, #a74a60); stop-opacity: .62; }
+    .logo-glow-middle { stop-color: var(--logo-glow, #a74a60); stop-opacity: .2; }
+    .logo-glow-end { stop-color: var(--logo-bg-middle, #17070b); stop-opacity: 0; }
+    .logo-metal-light { stop-color: var(--logo-metal-light, #fff0c8); }
+    .logo-metal-mid { stop-color: var(--logo-metal-mid, #cca34f); }
+    .logo-metal-shadow { stop-color: var(--logo-metal-shadow, #77462a); }
+    .logo-window-center { stop-color: var(--logo-window-center, #55242e); }
+    .logo-window-mid { stop-color: var(--logo-window-mid, #341019); }
+    .logo-window-edge { stop-color: var(--logo-window-edge, #0d0305); }
+    .logo-letter-face-light { stop-color: var(--logo-letter-light, #fff5de); }
+    .logo-letter-face-mid { stop-color: var(--logo-letter-mid, #e8ca8d); }
+    .logo-letter-face-shadow { stop-color: var(--logo-letter-shadow, #a85f38); }
+    .logo-letter-depth-light { stop-color: var(--logo-letter-shadow, #74313b); }
+    .logo-letter-depth-shadow { stop-color: var(--logo-letter-depth, #270b0f); }
+    .logo-light-beam { fill: var(--logo-metal-light, #fff0c8); opacity: .075; }
+    .logo-window-ring { stroke: var(--logo-metal-light, #fff0c8); }
+    .logo-window-inner-ring { stroke: var(--logo-ray, #d8b76d); opacity: .7; }
+    .logo-window-hub { fill: var(--logo-bg-middle, #17070b); stroke: var(--logo-ray, #d8b76d); opacity: .94; }
+    .logo-window-orbits { fill: none; stroke: var(--logo-ray, #d8b76d); opacity: .72; }
+    .logo-window-star { fill: var(--logo-metal-light, #fff0c8); stroke: var(--logo-metal-shadow, #77462a); }
+    .logo-window-star-secondary { fill: var(--logo-metal-mid, #cca34f); stroke: var(--logo-metal-light, #fff0c8); }
+    .logo-letter-depth { fill: url(#letter-depth); stroke: var(--logo-letter-depth, #270b0f); stroke-width: 18; }
+    .logo-letter { fill: url(#letter-face); stroke: var(--logo-letter-shadow, #a85f38); stroke-width: 18; }
+    .logo-letter-rim { fill: none; stroke: var(--logo-letter-rim, #e1bb63); stroke-width: 8; stroke-opacity: .96; }
+    .logo-border { stroke: var(--logo-metal-light, #fff0c8); stroke-opacity: .18; }
+  </style>
+
+  <g id="rouge" class="theme-marker" />
+  <g id="midnight" class="theme-marker" />
+  <g id="violet-amber" class="theme-marker" />
+  <g id="violet-crimson" class="theme-marker" />
+  <g id="violet-blue" class="theme-marker" />
+  <g id="gold-opera" class="theme-marker" />
+  <g id="scarlet-opera" class="theme-marker" />
+
+  <defs>
+    <linearGradient id="background" x1="72" y1="44" x2="440" y2="468" gradientUnits="userSpaceOnUse">
+      <stop class="logo-background-start" />
+      <stop class="logo-background-middle" offset=".55" />
+      <stop class="logo-background-end" offset="1" />
+    </linearGradient>
+    <radialGradient id="theme-glow" cx="0" cy="0" r="1" gradientTransform="translate(256 238) rotate(90) scale(206)" gradientUnits="userSpaceOnUse">
+      <stop class="logo-glow-start" />
+      <stop class="logo-glow-middle" offset=".58" />
+      <stop class="logo-glow-end" offset="1" />
+    </radialGradient>
+    <linearGradient id="metal" x1="256" y1="78" x2="256" y2="421" gradientUnits="userSpaceOnUse">
+      <stop class="logo-metal-light" />
+      <stop class="logo-metal-mid" offset=".35" />
+      <stop class="logo-metal-shadow" offset=".68" />
+      <stop class="logo-metal-light" offset="1" />
+    </linearGradient>
+    <radialGradient id="window" cx="0" cy="0" r="1" gradientTransform="translate(256 246) rotate(90) scale(126)" gradientUnits="userSpaceOnUse">
+      <stop class="logo-window-center" />
+      <stop class="logo-window-mid" offset=".46" />
+      <stop class="logo-window-edge" offset="1" />
+    </radialGradient>
+    <linearGradient id="letter-face" x1="256" y1="167" x2="256" y2="313" gradientUnits="userSpaceOnUse">
+      <stop class="logo-letter-face-light" />
+      <stop class="logo-letter-face-mid" offset=".46" />
+      <stop class="logo-letter-face-shadow" offset="1" />
+    </linearGradient>
+    <linearGradient id="letter-depth" x1="170" y1="180" x2="342" y2="326" gradientUnits="userSpaceOnUse">
+      <stop class="logo-letter-depth-light" />
+      <stop class="logo-letter-depth-shadow" offset="1" />
+    </linearGradient>
+    <filter id="soft-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <clipPath id="icon-clip"><rect width="512" height="512" rx="112" /></clipPath>
+  </defs>
+
+  <g class="logo-artwork" clip-path="url(#icon-clip)">
+    <rect width="512" height="512" fill="url(#background)" />
+    <rect width="512" height="512" fill="url(#theme-glow)" />
+    <path id="logo-light-beam" class="logo-light-beam" d="M170 0h172l91 438H79z" />
+    <g id="logo-emblem" transform="translate(0 18.4) translate(256 246) scale(1.24) translate(-256 -246)">
+    <g id="logo-window-composition" transform="translate(256 228) scale(1.36) translate(-256 -246)">
+    <circle id="logo-window-ring" class="logo-window-ring" cx="256" cy="246" r="119" fill="url(#window)" stroke-width="7" filter="url(#soft-glow)" />
+    <circle id="logo-window-guide" class="logo-window-inner-ring" cx="256" cy="246" r="99" fill="none" stroke-width="2.5" />
+    <g id="logo-window-orbits" class="logo-window-orbits" stroke-width="3">
+      <ellipse cx="256" cy="246" rx="91" ry="38" />
+      <ellipse cx="256" cy="246" rx="91" ry="38" transform="rotate(60 256 246)" />
+      <ellipse cx="256" cy="246" rx="91" ry="38" transform="rotate(-60 256 246)" />
+    </g>
+    <g id="logo-window-stars" stroke-width="2">
+      <circle class="logo-window-star" cx="347" cy="246" r="6" />
+      <circle class="logo-window-star logo-window-star-secondary" cx="210.5" cy="167.2" r="5" />
+      <circle class="logo-window-star logo-window-star-secondary" cx="210.5" cy="324.8" r="5" />
+    </g>
+    <circle id="logo-window-hub" class="logo-window-hub" cx="256" cy="246" r="43" stroke-width="3" />
+    <circle id="logo-window-core" class="logo-window-inner-ring" cx="256" cy="246" r="29" fill="none" stroke-width="2" />
+    <g id="logo-letter-assembly" transform="translate(12.7921909 0)" data-visual-anchor-source="529 -716">
+      <path class="logo-letter-depth" d="M 1080 -934 C 1110.667969 -942 1135.667969 -946 1155 -946 C 1174.332031 -946 1189.667969 -945.332031 1201 -944 L 1201 -934 C 1113.667969 -929.332031 1043.667969 -889.332031 991 -814 C 963.667969 -775.332031 941.667969 -730.332031 925 -679 L 737 -93 C 725.667969 -56.332031 720 -22.332031 720 9 C 720 12.332031 720 15.332031 720 18 L 710 18 L 493 -464 L 315 -41 C 297 3 270.667969 45.667969 236 87 C 198.667969 131 153.332031 160 100 174 C 87.332031 178 74 180 60 180 C 46 180 31 177.667969 15 173 L 16 163 C 40.667969 161.667969 64.5 155 87.5 143 C 110.5 131 130.667969 116.5 148 99.5 C 165.332031 82.5 182 62.667969 198 40 C 224 3.332031 246 -36.667969 264 -80 L 61 -632 C 52.332031 -651.332031 40 -665.832031 24 -675.5 C 8 -685.167969 -8.332031 -690 -25 -690 L -33 -690 L -33 -700 L 272 -700 L 272 -690 L 263 -690 C 249 -690 238.5 -685.5 231.5 -676.5 C 224.5 -667.5 221 -659 221 -651 C 221 -643 222.332031 -635.332031 225 -628 L 348 -281 L 529 -716 L 538 -715 L 737 -276 L 852 -679 C 868.667969 -737 895 -788.332031 931 -833 C 973 -885.667969 1022.667969 -919.332031 1080 -934 Z" transform="matrix(.1598579 0 0 .1598579 166.64298 312.22558)" />
+      <path id="logo-letter" class="logo-letter" d="M 1080 -934 C 1110.667969 -942 1135.667969 -946 1155 -946 C 1174.332031 -946 1189.667969 -945.332031 1201 -944 L 1201 -934 C 1113.667969 -929.332031 1043.667969 -889.332031 991 -814 C 963.667969 -775.332031 941.667969 -730.332031 925 -679 L 737 -93 C 725.667969 -56.332031 720 -22.332031 720 9 C 720 12.332031 720 15.332031 720 18 L 710 18 L 493 -464 L 315 -41 C 297 3 270.667969 45.667969 236 87 C 198.667969 131 153.332031 160 100 174 C 87.332031 178 74 180 60 180 C 46 180 31 177.667969 15 173 L 16 163 C 40.667969 161.667969 64.5 155 87.5 143 C 110.5 131 130.667969 116.5 148 99.5 C 165.332031 82.5 182 62.667969 198 40 C 224 3.332031 246 -36.667969 264 -80 L 61 -632 C 52.332031 -651.332031 40 -665.832031 24 -675.5 C 8 -685.167969 -8.332031 -690 -25 -690 L -33 -690 L -33 -700 L 272 -700 L 272 -690 L 263 -690 C 249 -690 238.5 -685.5 231.5 -676.5 C 224.5 -667.5 221 -659 221 -651 C 221 -643 222.332031 -635.332031 225 -628 L 348 -281 L 529 -716 L 538 -715 L 737 -276 L 852 -679 C 868.667969 -737 895 -788.332031 931 -833 C 973 -885.667969 1022.667969 -919.332031 1080 -934 Z" transform="matrix(.1598579 0 0 .1598579 158.64298 302.22558)" />
+      <path class="logo-letter-rim" d="M 1080 -934 C 1110.667969 -942 1135.667969 -946 1155 -946 C 1174.332031 -946 1189.667969 -945.332031 1201 -944 L 1201 -934 C 1113.667969 -929.332031 1043.667969 -889.332031 991 -814 C 963.667969 -775.332031 941.667969 -730.332031 925 -679 L 737 -93 C 725.667969 -56.332031 720 -22.332031 720 9 C 720 12.332031 720 15.332031 720 18 L 710 18 L 493 -464 L 315 -41 C 297 3 270.667969 45.667969 236 87 C 198.667969 131 153.332031 160 100 174 C 87.332031 178 74 180 60 180 C 46 180 31 177.667969 15 173 L 16 163 C 40.667969 161.667969 64.5 155 87.5 143 C 110.5 131 130.667969 116.5 148 99.5 C 165.332031 82.5 182 62.667969 198 40 C 224 3.332031 246 -36.667969 264 -80 L 61 -632 C 52.332031 -651.332031 40 -665.832031 24 -675.5 C 8 -685.167969 -8.332031 -690 -25 -690 L -33 -690 L -33 -700 L 272 -700 L 272 -690 L 263 -690 C 249 -690 238.5 -685.5 231.5 -676.5 C 224.5 -667.5 221 -659 221 -651 C 221 -643 222.332031 -635.332031 225 -628 L 348 -281 L 529 -716 L 538 -715 L 737 -276 L 852 -679 C 868.667969 -737 895 -788.332031 931 -833 C 973 -885.667969 1022.667969 -919.332031 1080 -934 Z" transform="matrix(.1598579 0 0 .1598579 158.64298 302.22558)" />
+    </g>
+    </g>
+    <ellipse id="logo-stage-base" cx="256" cy="404.9" rx="140" ry="16" fill="url(#metal)" opacity=".9" filter="url(#soft-glow)" />
+    </g>
+    <rect id="logo-border" class="logo-border" x="8" y="8" width="496" height="496" rx="104" fill="none" stroke-width="8" />
+  </g>
 </svg>
